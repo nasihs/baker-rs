@@ -1,2 +1,2 @@
 pub mod ihex;
-mod binary;
+pub mod binary;

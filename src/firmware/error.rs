@@ -8,6 +8,9 @@ pub enum FirmwareError {
     #[error("unsupported format: {0}")]
     UnsupportedFormat(String),
 
+    #[error("empty firmware image")]
+    EmptyImage,
+
     #[error("failed to parse Intel HEX: {0}")]
     IhexParse(#[from] ihex::ReaderError),
 
