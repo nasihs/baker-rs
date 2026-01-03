@@ -1,6 +1,7 @@
 use anyhow::{Context, Result};
 use baker_rs::cli::{self, Command};
 use baker_rs::config;
+use baker_rs::recipe::{self, BuildContext};
 
 fn main() -> Result<()> {
     let cli = cli::parse();
@@ -16,25 +17,12 @@ fn main() -> Result<()> {
 
     match cli.command {
         Some(Command::Build { targets }) => {
+            let ctx = BuildContext::new(&cli.config, &cfg.output.dir);
             let resolved = cfg.resolve_targets(&targets)?;
             println!("Building targets: {:?}", resolved);
 
             for target_name in resolved {
-                let target = cfg.targets.get(target_name).unwrap();
-                println!("\n[{}]", target_name);
-                match target {
-                    config::Target::Merge(t) => {
-                        println!("  Type: merge");
-                        println!("  App: {}", t.app.display());
-                        println!("  Bootloader: {}", t.bootloader);
-                        println!("  Offset: 0x{:X}", t.app_offset);
-                    }
-                    config::Target::Ota(t) => {
-                        println!("  Type: ota");
-                        println!("  Input: {}", t.input.display());
-                        println!("  Header: {:?}", t.header);
-                    }
-                }
+                recipe::execute_target(&cfg, target_name, &ctx)?;
             }
         }
         Some(Command::List) => {

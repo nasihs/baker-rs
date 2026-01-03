@@ -69,7 +69,7 @@ pub struct OutputConfig {
     /// 命名模板
     pub name_template: Option<String>,
     /// 日期格式
-    #[serde(default = "default_date_format")]
+    #[serde(default = "default_date_format")]  // TODO
     pub date_format: String,
 }
 

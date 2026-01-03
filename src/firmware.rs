@@ -5,3 +5,4 @@ mod formats;
 pub use error::FirmwareError;
 pub use image::FirmwareImage;
 pub use formats::ihex;
+pub use formats::binary;
