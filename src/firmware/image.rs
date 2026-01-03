@@ -1,6 +1,8 @@
 use std::collections::BTreeMap;
 
-// TODO 定义 地址类型？？
+use crate::firmware::FirmwareError;
+
+// TODO use Addr as u32 ? x64 support?
 
 #[derive(Default)]
 pub struct FirmwareImage {
@@ -12,9 +14,12 @@ impl FirmwareImage {
         FirmwareImage::default()
     }
 
-    // TODO 考虑 address 是否重复？
+    // TODO consider address is repeated? 
     pub fn add_data(&mut self, address: u32, data: Vec<u8>) {
-        self.segments.insert(address, data);
+        if !data.is_empty() {  // in case of data.len() == 0 
+            self.segments.insert(address, data);
+            // TODO there should be a warning
+        }
     }
 
     pub fn segments(&self) -> &BTreeMap<u32, Vec<u8>> {
@@ -22,7 +27,7 @@ impl FirmwareImage {
     }
 
     pub fn address_range(&self) -> Option<(u32, u32)> {
-        let (start, _) = self.segments.first_key_value()?;
+        let (start, _) = self.segments.first_key_value()?;  // image is empty ()
         let (last_addr, last_data) =self.segments.last_key_value()?;
 
         let end = last_addr + last_data.len() as u32 - 1;
@@ -40,6 +45,26 @@ impl FirmwareImage {
 
     pub fn is_empty(&self) -> bool {
         self.segments.is_empty()
+    }
+
+    pub fn merge(&mut self, other: &FirmwareImage, offset: u32) -> Result<(), FirmwareError> {  // TODO offset should be removed ?
+        let Some((other_start, other_end)) = other.address_range() else {
+            return Ok(());
+        };
+
+        let other_start = other_start + offset;
+        let other_end = other_end + offset;
+
+        if let Some((start, end)) = self.address_range() {
+            if other_start <= end && start <= other_end {
+                return Err(FirmwareError::AddressOverlap(start));
+            }
+        }
+
+        for (addr, data) in other.segments() {
+            self.segments.insert(addr + offset, data.clone());
+        }
+        Ok(())
     }
 }
 
@@ -72,10 +97,67 @@ mod tests {
     fn test_multiple_segments_with_gap() {
         let mut image = FirmwareImage::new();
         image.add_data(0x0000, vec![0x01, 0x02]);  // 2 bytes
-        image.add_data(0x1000, vec![0x03, 0x04]);  // 2 bytes, 有间隙
+        image.add_data(0x1000, vec![0x03, 0x04]);  // 2 bytes, gap exists
 
-        assert_eq!(image.data_size(), 4);                        // 实际数据 4 字节
-        assert_eq!(image.image_size(), Some(0x1002));            // 0x0000 到 0x1001 = 0x1002 字节
+        assert_eq!(image.data_size(), 4);                        // actual 4 bytes
+        assert_eq!(image.image_size(), Some(0x1002));            // 0x0000 - 0x1001 = 0x1002 bytes
         assert_eq!(image.address_range(), Some((0x0000, 0x1001)));
     }
+
+    #[test]
+    fn test_merge_no_overlap() {
+        let mut image1 = FirmwareImage::new();
+        image1.add_data(0x0000, vec![0x11; 16]);
+
+        let mut image2 = FirmwareImage::new();
+        image2.add_data(0x0000, vec![0x22; 16]);
+
+        image1.merge(&image2, 0x1000).unwrap();
+
+        assert_eq!(image1.segments().len(), 2);
+        assert_eq!(image1.address_range(), Some((0x0000, 0x100F)));
+    }
+
+    #[test]
+    fn test_merge_with_offset() {
+        let mut bootloader = FirmwareImage::new();
+        bootloader.add_data(0x0000, vec![0xAA; 0x100]);
+
+        let mut app = FirmwareImage::new();
+        app.add_data(0x0000, vec![0xBB; 0x100]);
+
+        // App offset to 0x8000
+        bootloader.merge(&app, 0x8000).unwrap();
+
+        assert!(bootloader.segments().contains_key(&0x0000));
+        assert!(bootloader.segments().contains_key(&0x8000));
+    }
+
+    #[test]
+    fn test_merge_overlap_error() {
+        let mut image1 = FirmwareImage::new();
+        image1.add_data(0x0000, vec![0x11; 0x100]);  // 0x0000 - 0x00FF
+
+        let mut image2 = FirmwareImage::new();
+        image2.add_data(0x0000, vec![0x22; 0x100]);
+
+        // offset will cause overlap
+        let result = image1.merge(&image2, 0x0080);
+
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_merge_empty_image() {
+        let mut image1 = FirmwareImage::new();
+        image1.add_data(0x0000, vec![0x11; 16]);
+
+        let image2 = FirmwareImage::new();  // empty image
+
+        // should success
+        image1.merge(&image2, 0x1000).unwrap();
+
+        assert_eq!(image1.segments().len(), 1);
+    }
+
 }
