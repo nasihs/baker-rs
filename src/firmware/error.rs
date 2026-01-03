@@ -11,6 +11,9 @@ pub enum FirmwareError {
     #[error("failed to parse Intel HEX: {0}")]
     IhexParse(#[from] ihex::ReaderError),
 
+    #[error("failed to write Intel HEX: {0}")]
+    IhexWrite(#[from] ihex::WriterError),
+
     #[error("address overlap at 0x{0:08X}")]
     AddressOverlap(u32),
 

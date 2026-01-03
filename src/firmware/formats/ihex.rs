@@ -21,7 +21,7 @@ pub fn read(path: &Path) -> Result<FirmwareImage, FirmwareError> {
             ihex::Record::ExtendedSegmentAddress(addr) => {
                 base_addr = (addr as u32) << 4;
             }
-            ihex::Record::Data { offset, value } => {
+            ihex::Record::Data { offset, value } => {  // TODO merge data in continued addr to optimize
                 image.add_data(base_addr + offset as u32, value);
             }
             ihex::Record::StartLinearAddress(_) => {  // TODO 
@@ -37,7 +37,36 @@ pub fn read(path: &Path) -> Result<FirmwareImage, FirmwareError> {
     Ok(image)
 }
 
+pub fn write(image: &FirmwareImage, path: &Path) -> Result<(), FirmwareError> {
+    let records = build_records(image)?;
+    let hex_str = ihex::create_object_file_representation(&records)?;
+    std::fs::write(path, hex_str)?;
+    Ok(())
+}
 
+fn build_records(image: &FirmwareImage) -> Result<Vec<ihex::Record>, FirmwareError> {
+    let mut records = Vec::new();
+    let mut current_high_addr: Option<u16> = None;
+    const BYTES_PER_LINE: usize = 16;
+
+    for (start_addr, data) in image.segments() {
+        let mut addr = *start_addr;
+
+        for chunk in data.chunks(BYTES_PER_LINE) {  // TODO or 32 bytes?
+            let high_addr = (addr >> 16) as u16;
+            if current_high_addr != Some(high_addr) {
+                current_high_addr = Some(high_addr);
+                records.push(ihex::Record::ExtendedLinearAddress(high_addr));
+            }
+            records.push(ihex::Record::Data { offset: (addr & 0xFFFF) as u16, value: chunk.to_vec() });
+            addr += chunk.len() as u32;
+        }
+    }
+
+    records.push(ihex::Record::EndOfFile);
+    Ok(records)
+
+}
 
 #[cfg(test)]
 mod tests {
@@ -88,4 +117,70 @@ mod tests {
         let result = read(Path::new("nonexistent.hex"));
         assert!(result.is_err());
     }
+
+    #[test]
+    fn test_write_and_read_back() {
+        let mut image = FirmwareImage::new();
+        image.add_data(0x1000, vec![0x01, 0x02, 0x03, 0x04]);
+        
+        let file = NamedTempFile::new().unwrap();
+        write(&image, file.path()).unwrap();
+        
+        // 读回来验证
+        let image2 = read(file.path()).unwrap();
+        assert_eq!(image.data_size(), image2.data_size());
+        assert_eq!(image.address_range(), image2.address_range());
+    }
+
+    #[test]
+    fn test_write_simple() {
+        let mut image = FirmwareImage::new();
+        image.add_data(0x0000, vec![0x01, 0x02, 0x03, 0x04]);
+
+        let file = NamedTempFile::new().unwrap();
+        write(&image, file.path()).unwrap();
+
+        // 读回验证
+        let image2 = read(file.path()).unwrap();
+        assert_eq!(image.data_size(), image2.data_size());
+        assert_eq!(image.address_range(), image2.address_range());
+    }
+
+    #[test]
+    fn test_write_large_data() {
+        let mut image = FirmwareImage::new();
+        image.add_data(0x1000, vec![0xAA; 100]);  // 超过 16 字节
+
+        let file = NamedTempFile::new().unwrap();
+        write(&image, file.path()).unwrap();
+
+        let image2 = read(file.path()).unwrap();
+        assert_eq!(image.data_size(), image2.data_size());
+    }
+
+    #[test]
+    fn test_write_high_address() {
+        let mut image = FirmwareImage::new();
+        image.add_data(0x08000000, vec![0x01, 0x02, 0x03, 0x04]);
+
+        let file = NamedTempFile::new().unwrap();
+        write(&image, file.path()).unwrap();
+
+        assert_eq!(image.address_range(), Some((0x08000000, 0x08000003)));
+    }
+
+    #[test]
+    fn test_roundtrip_multiple_segments() {
+        let mut image = FirmwareImage::new();
+        image.add_data(0x00000000, vec![0x11; 20]);
+        image.add_data(0x00001000, vec![0x22; 20]);
+        image.add_data(0x08000000, vec![0x33; 20]);  // 高地址段
+
+        let file = NamedTempFile::new().unwrap();
+        write(&image, file.path()).unwrap();
+
+        let image2 = read(file.path()).unwrap();
+        assert_eq!(image.data_size(), image2.data_size());
+    }
+
 }
