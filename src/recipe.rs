@@ -1,6 +1,6 @@
-pub mod error;
-pub mod context;
-pub mod executor;
+mod error;
+mod context;
+mod executor;
 
 pub use context::BuildContext;
 pub use error::RecipeError;

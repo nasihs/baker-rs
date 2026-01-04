@@ -4,7 +4,7 @@ use super::error::ConfigError;
 use super::schema::{Config, Group, Target};
 
 /// 从文件加载配置
-pub fn load(path: &Path) -> Result<Config, ConfigError> {
+pub fn load(path: &Path) -> Result<Config, ConfigError> {  // TODO use impl new 
     if !path.exists() {
         return Err(ConfigError::NotFound {
             path: path.to_path_buf(),
@@ -20,7 +20,7 @@ pub fn load(path: &Path) -> Result<Config, ConfigError> {
 }
 
 /// 验证配置有效性
-fn validate(config: &Config) -> Result<(), ConfigError> {
+fn validate(config: &Config) -> Result<(), ConfigError> {  // TODO move to impl 
     // 验证 targets 中引用的 bootloader 存在
     for (name, target) in &config.targets {
         if let Target::Merge(merge) = target {
@@ -34,7 +34,6 @@ fn validate(config: &Config) -> Result<(), ConfigError> {
         }
     }
 
-    // 验证 groups 中引用的 targets 存在
     for (group_name, group) in &config.groups {
         for target_name in group.targets() {
             if !config.targets.contains_key(target_name) {
@@ -46,51 +45,38 @@ fn validate(config: &Config) -> Result<(), ConfigError> {
         }
     }
 
-    // 验证 default 引用存在
-    if let Some(default) = &config.project.default {
-        if !config.targets.contains_key(default) && !config.groups.contains_key(default) {
-            return Err(ConfigError::InvalidTarget {
-                name: default.clone(),
-                reason: "specified as default but not defined as target or group".to_string(),
-            });
-        }
+    if !config.targets.contains_key(&config.project.default) && !config.groups.contains_key(&config.project.default) {
+        return Err(ConfigError::InvalidTarget {
+            name: config.project.default.clone(),
+            reason: "specified as default but not defined as target or group".to_string(),
+        });
     }
 
     Ok(())
 }
 
 impl Config {
-    /// 解析要构建的 targets
-    /// 如果指定了 targets，使用指定的
-    /// 否则使用 default
+    // resolve the targets to be build
+    // if targets are specified, build the specified
+    // or build the default
     pub fn resolve_targets<'a>(&'a self, specified: &'a [String]) -> Result<Vec<&'a str>, ConfigError> {
+        let mut result = Vec::new();
+
         if !specified.is_empty() {
-            // 展开所有指定的 targets 和 groups
-            let mut result = Vec::new();
             for name in specified {
                 self.expand_target_or_group(name, &mut result)?;
             }
-            return Ok(result);
         }
 
-        // 使用 default
-        if let Some(default) = &self.project.default {
-            let mut result = Vec::new();
-            self.expand_target_or_group(default, &mut result)?;
-            return Ok(result);
-        }
-
-        // 无 default 且未指定，构建所有 targets
-        Ok(self.targets.keys().map(|s| s.as_str()).collect())
+        self.expand_target_or_group(&self.project.default, &mut result)?;
+        return Ok(result);
     }
 
-    /// 展开 target 或 group
     fn expand_target_or_group<'a>(
         &'a self,
         name: &'a str,
         result: &mut Vec<&'a str>,
     ) -> Result<(), ConfigError> {
-        // 先检查是否是 target
         if self.targets.contains_key(name) {
             if !result.contains(&name) {
                 result.push(name);
@@ -98,7 +84,6 @@ impl Config {
             return Ok(());
         }
 
-        // 再检查是否是 group
         if let Some(group) = self.groups.get(name) {
             for target_name in group.targets() {
                 if self.targets.contains_key(target_name) {
@@ -115,13 +100,12 @@ impl Config {
         Err(ConfigError::TargetNotFound(name.to_string()))
     }
 
-    /// 获取 bootloader 路径
-    pub fn get_bootloader_path(&self, reference: &str) -> Option<&Path> {
-        // 先查找 bootloaders 定义
-        if let Some(bl) = self.bootloaders.get(reference) {
-            return Some(&bl.file);
-        }
-        // 否则当作直接路径
-        None
-    }
+    // pub fn get_bootloader_path(&self, reference: &str) -> Option<&Path> {
+    //     // 先查找 bootloaders 定义
+    //     if let Some(bl) = self.bootloaders.get(reference) {
+    //         return Some(&bl.file);
+    //     }
+    //     // 否则当作直接路径
+    //     None
+    // }
 }

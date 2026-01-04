@@ -6,6 +6,9 @@ pub enum RecipeError {
     #[error("target not found: {0}")]
     TargetNotFound(String),
 
+    #[error("bootloader '{0}' has no file specified")]
+    BootloaderFileNotSpecified(String),
+
     #[error("bootloader not found: {0}")]
     BootloaderNotFound(String),
 

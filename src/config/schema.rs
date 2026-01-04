@@ -2,7 +2,6 @@ use serde::Deserialize;
 use std::collections::HashMap;
 use std::path::PathBuf;
 
-/// 顶层配置结构
 #[derive(Debug, Deserialize)]
 pub struct Config {
     pub project: Project,
@@ -18,19 +17,18 @@ pub struct Config {
     pub groups: HashMap<String, Group>,
 }
 
-/// 项目基本信息
+// project info
 #[derive(Debug, Deserialize)]
 pub struct Project {
     pub name: String,
-    /// 默认构建的 target 或 group
-    pub default: Option<String>,
+    pub default: String,
 }
 
 /// 版本提取配置
 #[derive(Debug, Deserialize)]
 #[serde(tag = "source", rename_all = "snake_case")]
 pub enum VersionConfig {
-    /// 从 C/C++ 头文件提取
+    /// extract version num from an C/C++ header
     Header {
         file: PathBuf,
         /// 正则表达式，需包含 major, minor, patch 捕获组
@@ -60,25 +58,16 @@ pub enum VersionConfig {
     },
 }
 
-/// 输出配置
 #[derive(Debug, Deserialize)]
 pub struct OutputConfig {
-    /// 输出目录
     #[serde(default = "default_output_dir")]
     pub dir: PathBuf,
-    /// 命名模板
-    pub name_template: Option<String>,
-    /// 日期格式
-    #[serde(default = "default_date_format")]  // TODO
-    pub date_format: String,
 }
 
 impl Default for OutputConfig {
     fn default() -> Self {
         Self {
             dir: default_output_dir(),
-            name_template: None,
-            date_format: default_date_format(),
         }
     }
 }
@@ -87,18 +76,19 @@ fn default_output_dir() -> PathBuf {
     PathBuf::from("output")
 }
 
-fn default_date_format() -> String {
-    "%Y%m%d".to_string()
-}
+// fn default_date_format() -> String {
+//     "%Y%m%d".to_string()
+// }
 
-/// Bootloader 定义
 #[derive(Debug, Deserialize)]
 pub struct Bootloader {
-    pub file: PathBuf,
+    pub file: Option<PathBuf>,   // check when recipe runs
+    // TODO: u32->Addr
+    pub base_addr: u32,  // used to check whether bootloader's base addr is correct when file isn't a bin
+    pub app_offset: u32,
     pub version: Option<String>,
 }
 
-/// Target 定义 - 使用 tagged enum
 #[derive(Debug, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum Target {
@@ -107,7 +97,7 @@ pub enum Target {
 }
 
 impl Target {
-    /// 获取 target 的描述
+
     pub fn description(&self) -> Option<&str> {
         match self {
             Target::Merge(t) => t.description.as_deref(),
@@ -115,7 +105,6 @@ impl Target {
         }
     }
 
-    /// 获取输出文件名模板
     pub fn output_name(&self) -> Option<&str> {
         match self {
             Target::Merge(t) => t.output_name.as_deref(),
@@ -124,46 +113,34 @@ impl Target {
     }
 }
 
-/// Merge 类型 Target - 合并 bootloader 和 app
 #[derive(Debug, Deserialize)]
 pub struct MergeTarget {
     pub description: Option<String>,
-    /// App 固件路径
-    pub app: PathBuf,
-    /// Bootloader 引用名 或 直接路径
-    pub bootloader: String,
-    /// App 偏移地址
-    #[serde(deserialize_with = "deserialize_hex_u32")]
-    pub app_offset: u32,
-    /// 填充字节
+    pub bootloader: String,  // refrence of bootloaders
+    pub app_file: PathBuf,
     #[serde(default = "default_fill_byte")]
     pub fill_byte: u8,
-    /// 输出格式
     #[serde(default)]
     pub output_format: OutputFormat,
-    /// 输出文件名模板
-    pub output_name: Option<String>,
+    pub output_name: Option<String>,  // if not defined, use target name as default
+    pub output_dir: Option<PathBuf>,
 }
 
-/// OTA 类型 Target - OTA 打包或纯转换
 #[derive(Debug, Deserialize)]
 pub struct OtaTarget {
     pub description: Option<String>,
-    /// 输入固件路径
-    pub input: PathBuf,
-    /// Header 类型
-    #[serde(default)]
     pub header: HeaderType,
-    /// 自定义 header 定义（当 header = custom 时）
-    pub header_def: Option<String>,
-    /// 输出格式
     #[serde(default)]
-    pub output_format: OutputFormat,
-    /// 输出文件名模板
-    pub output_name: Option<String>,
+    pub header_def: Option<String>,  // for header: custom only
+    pub app_file: PathBuf,
+    #[serde(default = "default_fill_byte")]
+    pub fill_byte: u8,
+    #[serde(default)]
+    pub output_format: OutputFormat,  // bin for default
+    pub output_name: Option<String>,  // if not defined, use target name as default
+    pub output_dir: Option<PathBuf>,
 }
 
-/// Header 类型
 #[derive(Debug, Default, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum HeaderType {
@@ -173,7 +150,6 @@ pub enum HeaderType {
     Custom,
 }
 
-/// 输出格式
 #[derive(Debug, Default, Clone, Copy, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum OutputFormat {
@@ -193,13 +169,11 @@ impl OutputFormat {
     }
 }
 
-/// Group 定义
 #[derive(Debug, Deserialize)]
 #[serde(untagged)]
 pub enum Group {
-    /// 简单列表: group_name = ["target1", "target2"]
+    /// group_name = ["target1", "target2"]
     Simple(Vec<String>),
-    /// 详细定义
     Detailed {
         targets: Vec<String>,
         description: Option<String>,
@@ -226,29 +200,3 @@ fn default_fill_byte() -> u8 {
     0xFF
 }
 
-/// 反序列化十六进制数字 (支持 0x8000 或 32768)
-fn deserialize_hex_u32<'de, D>(deserializer: D) -> Result<u32, D::Error>
-where
-    D: serde::Deserializer<'de>,
-{
-    use serde::de::Error;
-
-    #[derive(Deserialize)]
-    #[serde(untagged)]
-    enum HexOrInt {
-        Int(u32),
-        Str(String),
-    }
-
-    match HexOrInt::deserialize(deserializer)? {
-        HexOrInt::Int(v) => Ok(v),
-        HexOrInt::Str(s) => {
-            let s = s.trim();
-            if let Some(hex) = s.strip_prefix("0x").or_else(|| s.strip_prefix("0X")) {
-                u32::from_str_radix(hex, 16).map_err(D::Error::custom)
-            } else {
-                s.parse().map_err(D::Error::custom)
-            }
-        }
-    }
-}

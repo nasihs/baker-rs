@@ -21,7 +21,7 @@ pub fn execute_target(config: &Config, target_name: &str, ctx: &BuildContext) ->
 fn execute_merge(target: &MergeTarget, target_name: &str, config: &Config, ctx: &BuildContext) -> Result<(), RecipeError> {
     let bootloader_path = resolve_bootloader(&target.bootloader, config, ctx)?;
 
-    let app_path = ctx.resolve_path(&target.app);
+    let app_path = ctx.resolve_path(&target.app_file);
 
     if !bootloader_path.exists() {
         return Err(RecipeError::InputNotFound(bootloader_path));
@@ -36,8 +36,7 @@ fn execute_merge(target: &MergeTarget, target_name: &str, config: &Config, ctx: 
     println!("  Loading app: {}", app_path.display());
     let app = firmware::ihex::read(&app_path)?;
 
-    println!("  Merging at offset 0x{:08X}", target.app_offset);
-    image.merge(&app, target.app_offset)?;
+    image.merge(&app)?;
 
     std::fs::create_dir_all(&ctx.output_dir)?;
 
@@ -87,5 +86,10 @@ fn resolve_bootloader(
         .get(reference)
         .ok_or_else(|| RecipeError::BootloaderNotFound(reference.to_owned()))?;
 
-    Ok(ctx.resolve_path(&bl.file))
+    if let Some(path) = bl.file.clone() {
+        return Ok(ctx.resolve_path(path.as_path()));
+    }
+
+    Err(RecipeError::BootloaderFileNotSpecified(reference.to_owned()))
+    // Ok(ctx.resolve_path())
 }

@@ -47,13 +47,13 @@ impl FirmwareImage {
         self.segments.is_empty()
     }
 
-    pub fn merge(&mut self, other: &FirmwareImage, offset: u32) -> Result<(), FirmwareError> {  // TODO offset should be removed ?
+    pub fn merge(&mut self, other: &FirmwareImage) -> Result<(), FirmwareError> {  // TODO offset should be removed ?
         let Some((other_start, other_end)) = other.address_range() else {
             return Ok(());
         };
 
-        let other_start = other_start + offset;
-        let other_end = other_end + offset;
+        let other_start = other_start + 0;
+        let other_end = other_end + 0;
 
         if let Some((start, end)) = self.address_range() {
             if other_start <= end && start <= other_end {
@@ -62,7 +62,7 @@ impl FirmwareImage {
         }
 
         for (addr, data) in other.segments() {
-            self.segments.insert(addr + offset, data.clone());
+            self.segments.insert(addr + 0, data.clone());
         }
         Ok(())
     }
@@ -110,9 +110,9 @@ mod tests {
         image1.add_data(0x0000, vec![0x11; 16]);
 
         let mut image2 = FirmwareImage::new();
-        image2.add_data(0x0000, vec![0x22; 16]);
+        image2.add_data(0x1000, vec![0x22; 16]);
 
-        image1.merge(&image2, 0x1000).unwrap();
+        image1.merge(&image2).unwrap();
 
         assert_eq!(image1.segments().len(), 2);
         assert_eq!(image1.address_range(), Some((0x0000, 0x100F)));
@@ -124,10 +124,10 @@ mod tests {
         bootloader.add_data(0x0000, vec![0xAA; 0x100]);
 
         let mut app = FirmwareImage::new();
-        app.add_data(0x0000, vec![0xBB; 0x100]);
+        app.add_data(0x8000, vec![0xBB; 0x100]);
 
         // App offset to 0x8000
-        bootloader.merge(&app, 0x8000).unwrap();
+        bootloader.merge(&app).unwrap();
 
         assert!(bootloader.segments().contains_key(&0x0000));
         assert!(bootloader.segments().contains_key(&0x8000));
@@ -139,10 +139,10 @@ mod tests {
         image1.add_data(0x0000, vec![0x11; 0x100]);  // 0x0000 - 0x00FF
 
         let mut image2 = FirmwareImage::new();
-        image2.add_data(0x0000, vec![0x22; 0x100]);
+        image2.add_data(0x0080, vec![0x22; 0x100]);
 
-        // offset will cause overlap
-        let result = image1.merge(&image2, 0x0080);
+        // will  overlap
+        let result = image1.merge(&image2);
 
         assert!(result.is_err());
     }
@@ -155,7 +155,7 @@ mod tests {
         let image2 = FirmwareImage::new();  // empty image
 
         // should success
-        image1.merge(&image2, 0x1000).unwrap();
+        image1.merge(&image2).unwrap();
 
         assert_eq!(image1.segments().len(), 1);
     }
