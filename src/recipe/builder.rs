@@ -1,5 +1,5 @@
 use std::path::{Path, PathBuf};
-use crate::config::{Config, Target, MergeTarget, OtaTarget};
+use crate::config::{Bootloader, Config, MergeTarget, OtaTarget, Target};
 use super::{Recipe, RecipeError, MergeRecipe, OtaRecipe, GroupRecipe};
 
 pub struct RecipeBuilder<'a> {
@@ -34,7 +34,7 @@ impl<'a> RecipeBuilder<'a> {
     }
     
     fn build_merge(&self, name: &str, t: &MergeTarget) -> Result<MergeRecipe, RecipeError> {
-        let bl = self.config.bootloaders.get(&t.bootloader)
+        let bl: &Bootloader = self.config.bootloaders.get(&t.bootloader)
             .ok_or_else(|| RecipeError::BootloaderNotFound(t.bootloader.clone()))?;
         
         let bl_file = bl.file.as_ref()

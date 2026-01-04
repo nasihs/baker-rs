@@ -24,6 +24,7 @@ fn main() -> Result<()> {
 
             for target_name in resolved {
                 let recipe = builder.build(target_name)?;
+                recipe.validate()?;
                 recipe.cook()?;
             }
         }

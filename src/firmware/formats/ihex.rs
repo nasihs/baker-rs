@@ -47,7 +47,7 @@ pub fn write(image: &FirmwareImage, path: &Path) -> Result<(), FirmwareError> {
 fn build_records(image: &FirmwareImage) -> Result<Vec<ihex::Record>, FirmwareError> {
     let mut records = Vec::new();
     let mut current_high_addr: Option<u16> = None;
-    const BYTES_PER_LINE: usize = 16;
+    const BYTES_PER_LINE: usize = 32;
 
     for (start_addr, data) in image.segments() {
         let mut addr = *start_addr;

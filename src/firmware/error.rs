@@ -17,6 +17,9 @@ pub enum FirmwareError {
     #[error("failed to write Intel HEX: {0}")]
     IhexWrite(#[from] ihex::WriterError),
 
+    #[error("{0}")]
+    InvalidFormat(String),
+
     #[error("address overlap at 0x{0:08X}")]
     AddressOverlap(u32),
 

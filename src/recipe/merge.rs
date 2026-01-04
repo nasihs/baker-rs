@@ -22,10 +22,10 @@ impl Recipe for MergeRecipe {
     
     fn cook(&self) -> Result<CookResult, RecipeError> {
         println!("  Loading bootloader: {}", self.bootloader_path.display());
-        let mut image = firmware::ihex::read(&self.bootloader_path)?;
+        let mut image = firmware::read(&self.bootloader_path, Some(self.base_addr))?;
         
         println!("  Loading app: {}", self.app_path.display());
-        let app = firmware::ihex::read(&self.app_path)?;
+        let app = firmware::read(&self.app_path, Some(self.base_addr + self.app_offset))?;
         
         image.merge(&app)?;
         

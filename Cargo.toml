@@ -1,6 +1,6 @@
 [package]
 name = "baker-rs"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 authors = ["nasihs <nasihs1113@gmail.com>"]
 description = "Build Automation Kit for Embedded Release"
