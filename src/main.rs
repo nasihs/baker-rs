@@ -1,33 +1,36 @@
+use std::path::Path;
 use anyhow::{Context, Result};
+use log::{info};
 use baker_rs::cli::{self, Command};
 use baker_rs::config;
-use baker_rs::recipe::{self, BuildContext};
+use baker_rs::recipe::RecipeBuilder;
 
 fn main() -> Result<()> {
     let cli = cli::parse();
 
-    // 加载配置
-    let cfg = config::load(&cli.config).context("failed to load config")?;
-
-    if cli.verbose {
-        println!("Project: {}", cfg.project.name);
-        println!("Targets: {:?}", cfg.targets.keys().collect::<Vec<_>>());
-        println!("Groups: {:?}", cfg.groups.keys().collect::<Vec<_>>());
-    }
+    env_logger::Builder::new()
+        .filter_level(cli.log_level())
+        .format_timestamp(None)
+        .init();
 
     match cli.command {
         Some(Command::Build { targets }) => {
-            let ctx = BuildContext::new(&cli.config, &cfg.output.dir);
+            let cfg = config::load(&cli.config).context("failed to load config")?;
+            let base_dir = cli.config.parent().unwrap_or(Path::new("."));
+            let builder = RecipeBuilder::new(&cfg, base_dir);
+
             let resolved = cfg.resolve_targets(&targets)?;
-            println!("Building targets: {:?}", resolved);
+            info!("Building targets: {:?}", resolved);
 
             for target_name in resolved {
-                recipe::execute_target(&cfg, target_name, &ctx)?;
+                let recipe = builder.build(target_name)?;
+                recipe.cook()?;
             }
         }
         Some(Command::List) => {
-            println!("Project: {}\n", cfg.project.name);
+            let cfg = config::load(&cli.config).context("failed to load config")?;
 
+            println!("Project: {}\n", cfg.project.name);
             println!("Targets:");
             for (name, target) in &cfg.targets {
                 let desc = target.description().unwrap_or("-");
@@ -52,8 +55,7 @@ fn main() -> Result<()> {
             println!("TODO: Extract version");
         }
         None => {
-            let resolved = cfg.resolve_targets(&[])?;
-            println!("Building default targets: {:?}", resolved);
+            cli::print_help();
         }
     }
 

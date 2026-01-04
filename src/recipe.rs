@@ -1,7 +1,31 @@
 mod error;
-mod context;
-mod executor;
+mod merge;
+mod ota;
+mod group;
+mod builder;
 
-pub use context::BuildContext;
 pub use error::RecipeError;
-pub use executor::execute_target;
+pub use merge::MergeRecipe;
+pub use ota::OtaRecipe;
+pub use group::GroupRecipe;
+pub use builder::RecipeBuilder;
+
+use std::fmt::Display;
+use std::path::PathBuf;
+
+/// Recipe trait - abstraction for all build recipes
+pub trait Recipe: Display {
+    fn name(&self) -> &str;
+    fn description(&self) -> Option<&str>;
+    fn cook(&self) -> Result<CookResult, RecipeError>;
+    fn validate(&self) -> Result<(), RecipeError>;
+}
+
+/// Build result
+pub enum CookResult {
+    Single { 
+        name: String, 
+        output_path: PathBuf,
+    },
+    Batch(Vec<CookResult>),
+}

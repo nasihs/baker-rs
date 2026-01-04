@@ -24,7 +24,6 @@ pub struct Project {
     pub default: String,
 }
 
-/// 版本提取配置
 #[derive(Debug, Deserialize)]
 #[serde(tag = "source", rename_all = "snake_case")]
 pub enum VersionConfig {
@@ -141,7 +140,7 @@ pub struct OtaTarget {
     pub output_dir: Option<PathBuf>,
 }
 
-#[derive(Debug, Default, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Default, Clone, Copy, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum HeaderType {
     #[default]

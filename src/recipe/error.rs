@@ -9,7 +9,7 @@ pub enum RecipeError {
     #[error("bootloader '{0}' has no file specified")]
     BootloaderFileNotSpecified(String),
 
-    #[error("bootloader not found: {0}")]
+    #[error("bootloader '{0}' not found")]
     BootloaderNotFound(String),
 
     #[error("input file not found: {}", .0.display())]
@@ -21,9 +21,9 @@ pub enum RecipeError {
     #[error("firmware error: {0}")]
     Firmware(#[from] crate::firmware::FirmwareError),
 
-    #[error("io error: {0}")]
+    #[error("IO error: {0}")]
     Io(#[from] std::io::Error),
 
-    #[error("failed to build target '{name}': {reason}")]
+    #[error("build failed for '{name}': {reason}")]
     BuildFailed { name: String, reason: String },
 }

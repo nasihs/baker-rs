@@ -47,7 +47,7 @@ impl FirmwareImage {
         self.segments.is_empty()
     }
 
-    pub fn merge(&mut self, other: &FirmwareImage) -> Result<(), FirmwareError> {  // TODO offset should be removed ?
+    pub fn merge(&mut self, other: &FirmwareImage) -> Result<(), FirmwareError> {
         let Some((other_start, other_end)) = other.address_range() else {
             return Ok(());
         };
