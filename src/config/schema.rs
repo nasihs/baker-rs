@@ -1,12 +1,12 @@
-use serde::Deserialize;
-use std::collections::HashMap;
 use std::path::PathBuf;
+use std::collections::HashMap;
+use serde::Deserialize;
 
 #[derive(Debug, Deserialize)]
 pub struct Config {
     pub project: Project,
-    #[serde(default)]
-    pub version: Option<VersionConfig>,
+    // #[serde(default)]
+    // pub version: Option<VersionConfig>,  // TODO
     #[serde(default)]
     pub output: OutputConfig,
     #[serde(default)]
@@ -17,44 +17,10 @@ pub struct Config {
     pub groups: HashMap<String, Group>,
 }
 
-// project info
 #[derive(Debug, Deserialize)]
 pub struct Project {
     pub name: String,
     pub default: String,
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(tag = "source", rename_all = "snake_case")]
-pub enum VersionConfig {
-    /// extract version num from an C/C++ header
-    Header {
-        file: PathBuf,
-        /// 正则表达式，需包含 major, minor, patch 捕获组
-        /// 或单个 version 捕获组
-        pattern: Option<String>,
-    },
-    /// 从分离的宏定义提取
-    SplitMacro {
-        file: PathBuf,
-        major: String,
-        minor: String,
-        patch: Option<String>,
-    },
-    /// 从 CMake 文件提取
-    Cmake {
-        file: PathBuf,
-    },
-    /// 从 Git tag 提取
-    Git {
-        pattern: Option<String>,
-    },
-    /// 从 JSON/TOML 文件提取
-    File {
-        file: PathBuf,
-        /// JSON path，如 "version.major"
-        path: Option<String>,
-    },
 }
 
 #[derive(Debug, Deserialize)]
@@ -74,10 +40,6 @@ impl Default for OutputConfig {
 fn default_output_dir() -> PathBuf {
     PathBuf::from("output")
 }
-
-// fn default_date_format() -> String {
-//     "%Y%m%d".to_string()
-// }
 
 #[derive(Debug, Deserialize)]
 pub struct Bootloader {
@@ -119,6 +81,7 @@ pub struct MergeTarget {
     pub app_file: PathBuf,
     #[serde(default = "default_fill_byte")]
     pub fill_byte: u8,
+    
     #[serde(default)]
     pub output_format: OutputFormat,
     pub output_name: Option<String>,  // if not defined, use target name as default
@@ -134,11 +97,13 @@ pub struct OtaTarget {
     pub app_file: PathBuf,
     #[serde(default = "default_fill_byte")]
     pub fill_byte: u8,
+    
     #[serde(default)]
     pub output_format: OutputFormat,  // bin for default
     pub output_name: Option<String>,  // if not defined, use target name as default
     pub output_dir: Option<PathBuf>,
 }
+
 
 #[derive(Debug, Default, Clone, Copy, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
@@ -198,4 +163,3 @@ impl Group {
 fn default_fill_byte() -> u8 {
     0xFF
 }
-

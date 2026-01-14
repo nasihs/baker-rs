@@ -29,6 +29,26 @@ pub enum ConfigError {
 
     #[error("no default target or group specified")]
     NoDefault,
+
+    /////////////
+    /// 
+    /// 
+    /// 
+    
+    #[error("Config file not found: {}", path.display())]
+    ConfigNotFound { path: PathBuf },
+
+    // #[error("failed to read config file: {0}")]
+    // Read(#[from] std::io::Error),
+
+    // #[error("Failed to parse config file")]
+    // Parse(#[from] toml::de::Error),
+
+    #[error("Invalid config file ({0})")]
+    Invalid(String),  // 字段错误 / 选项错误 / 循环引用
+
+    #[error("Firmware not found ({0})")]
+    FirmwareNotFound(String),  // bootloader / app 固件路径不存在
 }
 
 

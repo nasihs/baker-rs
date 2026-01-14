@@ -1,10 +1,31 @@
-use std::path::Path;
-use ihex::Reader;
-use crate::firmware::{FirmwareError, Image, ImageReader, ImageWriter};
+use std::path::{Path, PathBuf};
+use super::super::error::FirmwareError;
+use super::super::image::{Image, ImageReader, ImageWriter};
 
-pub fn read(path: &Path) -> Result<Image, FirmwareError> {
+
+pub struct HexReader {
+    file: PathBuf,
+}
+
+pub struct HexWriter {
+    file: PathBuf,
+}
+
+impl ImageReader for HexReader {
+    fn read(&self) -> Result<Image, FirmwareError> {
+        read(&self.file)
+    }
+}
+
+impl ImageWriter for HexWriter {
+    fn write(&self, image: &Image) -> Result<(), FirmwareError> {
+        write(image, &self.file)
+    }
+}
+
+fn read(path: &Path) -> Result<Image, FirmwareError> {
     let content = std::fs::read_to_string(path)?;
-    let reader = Reader::new(&content);
+    let reader = ihex::Reader::new(&content);
 
     let mut image = Image::new();
     let mut base_addr: u32 = 0;
@@ -36,7 +57,7 @@ pub fn read(path: &Path) -> Result<Image, FirmwareError> {
     Ok(image)
 }
 
-pub fn write(image: &Image, path: &Path) -> Result<(), FirmwareError> {
+fn write(image: &Image, path: &Path) -> Result<(), FirmwareError> {
     let records = build_records(image)?;
     let hex_str = ihex::create_object_file_representation(&records)?;
     std::fs::write(path, hex_str)?;

@@ -1,23 +1,7 @@
 use std::path::Path;
 
 use super::error::ConfigError;
-use super::schema::{Config, Group, Target};
-
-/// 从文件加载配置
-pub fn load(path: &Path) -> Result<Config, ConfigError> {  // TODO use impl new 
-    if !path.exists() {
-        return Err(ConfigError::NotFound {
-            path: path.to_path_buf(),
-        });
-    }
-
-    let content = std::fs::read_to_string(path)?;
-    let config: Config = toml::from_str(&content)?;
-
-    validate(&config)?;
-
-    Ok(config)
-}
+use super::schema::{Config, Group, Target, Bootloader};
 
 /// 验证配置有效性
 fn validate(config: &Config) -> Result<(), ConfigError> {  // TODO move to impl 
@@ -56,6 +40,43 @@ fn validate(config: &Config) -> Result<(), ConfigError> {  // TODO move to impl
 }
 
 impl Config {
+    pub fn from_file(path: &Path) -> Result<Self, ConfigError> {
+        if !path.exists() {
+            return Err(ConfigError::NotFound { path: path.to_path_buf() });
+        }
+        let content = std::fs::read_to_string(path)?;
+
+        Self::from_str(&content)
+    }
+
+    pub fn from_str(content: &str) -> Result<Self, ConfigError> {
+        let config = toml::from_str(content)?;
+
+        Self::validate(&config)?;
+
+        Ok(config)
+    }
+
+    pub fn validate(&self) -> Result<(), ConfigError> {
+        
+
+
+        Ok(())
+    }
+
+
+    fn validate_bootloader(&self, bl: &Bootloader) -> Result<(), ConfigError> {
+        todo!()
+    }
+
+    fn validate_target(&self, target: &Target) -> Result<(), ConfigError> {
+        todo!()
+    }
+
+    fn validate_group(&self, group: &Group) -> Result<(), ConfigError> {
+        todo!()
+    }
+
     // resolve the targets to be build
     // if targets are specified, build the specified
     // or build the default
@@ -100,12 +121,4 @@ impl Config {
         Err(ConfigError::TargetNotFound(name.to_string()))
     }
 
-    // pub fn get_bootloader_path(&self, reference: &str) -> Option<&Path> {
-    //     // 先查找 bootloaders 定义
-    //     if let Some(bl) = self.bootloaders.get(reference) {
-    //         return Some(&bl.file);
-    //     }
-    //     // 否则当作直接路径
-    //     None
-    // }
 }

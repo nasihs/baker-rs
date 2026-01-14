@@ -2,8 +2,29 @@ use std::path::Path;
 use anyhow::{Context, Result};
 use log::{info};
 use baker_rs::cli::{self, Command};
-use baker_rs::config;
+use baker_rs::config::{self, Config};
 use baker_rs::recipe::RecipeBuilder;
+
+static TEST_TOML: &str = r##"
+    name = "test_firmware"
+    default = "test"
+
+    [output]
+    dir = "release"
+
+    [bootloaders.main]
+    file = "build/bt.hex"
+    base_addr = 0x0800_0000
+    app_offset = 0x8000
+
+    [targets.test]
+    type = "merge"
+    description = "Test only"
+    bootloader = "main"
+    app_file = "build/app.hex"
+    output_format = "hex"
+    output_name = "test_merge"
+"##;
 
 fn main() -> Result<()> {
     let cli = cli::parse();
@@ -15,7 +36,7 @@ fn main() -> Result<()> {
 
     match cli.command {
         Some(Command::Build { targets }) => {
-            let cfg = config::load(&cli.config).context("failed to load config")?;
+            let cfg = Config::from_file(&cli.config).context("failed to load config file")?;
             let base_dir = cli.config.parent().unwrap_or(Path::new("."));
             let builder = RecipeBuilder::new(&cfg, base_dir);
 
@@ -29,7 +50,7 @@ fn main() -> Result<()> {
             }
         }
         Some(Command::List) => {
-            let cfg = config::load(&cli.config).context("failed to load config")?;
+            let cfg = Config::from_file(&cli.config).context("failed to load config file")?;
 
             println!("Project: {}\n", cfg.project.name);
             println!("Targets:");

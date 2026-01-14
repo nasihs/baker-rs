@@ -1,17 +1,25 @@
 use std::collections::BTreeMap;
 
-use crate::firmware::FirmwareError;
+use super::FirmwareError;
+
+pub trait ImageReader {
+    fn read(&self) -> Result<Image, FirmwareError>;
+}
+
+pub trait ImageWriter {
+    fn write(&self, image: &Image) -> Result<(), FirmwareError>;
+}
 
 // TODO use Addr as u32 ? x64 support?
 
 #[derive(Default)]
-pub struct FirmwareImage {
+pub struct Image {
     segments: BTreeMap<u32, Vec<u8>>,
 }
 
-impl FirmwareImage {
+impl Image {
     pub fn new() -> Self {
-        FirmwareImage::default()
+        Image::default()
     }
 
     // TODO consider address is repeated? 
@@ -47,7 +55,7 @@ impl FirmwareImage {
         self.segments.is_empty()
     }
 
-    pub fn merge(&mut self, other: &FirmwareImage) -> Result<(), FirmwareError> {
+    pub fn merge(&mut self, other: &Image) -> Result<(), FirmwareError> {
         let Some((other_start, other_end)) = other.address_range() else {
             return Ok(());
         };
@@ -56,9 +64,9 @@ impl FirmwareImage {
         let other_end = other_end + 0;
 
         if let Some((start, end)) = self.address_range() {
-            if other_start <= end && start <= other_end {
-                return Err(FirmwareError::AddressOverlap(start));
-            }
+            // if other_start <= end && start <= other_end {
+            //     return Err(FirmwareError::AddressOverlap(start));
+            // }
         }
 
         for (addr, data) in other.segments() {
@@ -76,7 +84,7 @@ mod tests {
 
     #[test]
     fn test_empty_image() {
-        let image = FirmwareImage::new();
+        let image = Image::new();
         assert!(image.is_empty());
         assert_eq!(image.data_size(), 0);
         assert_eq!(image.image_size(), None);
@@ -85,7 +93,7 @@ mod tests {
 
     #[test]
     fn test_single_segment() {
-        let mut image = FirmwareImage::new();
+        let mut image = Image::new();
         image.add_data(0x1000, vec![0x01, 0x02, 0x03, 0x04]);
 
         assert_eq!(image.data_size(), 4);
@@ -95,7 +103,7 @@ mod tests {
 
     #[test]
     fn test_multiple_segments_with_gap() {
-        let mut image = FirmwareImage::new();
+        let mut image = Image::new();
         image.add_data(0x0000, vec![0x01, 0x02]);  // 2 bytes
         image.add_data(0x1000, vec![0x03, 0x04]);  // 2 bytes, gap exists
 
@@ -106,10 +114,10 @@ mod tests {
 
     #[test]
     fn test_merge_no_overlap() {
-        let mut image1 = FirmwareImage::new();
+        let mut image1 = Image::new();
         image1.add_data(0x0000, vec![0x11; 16]);
 
-        let mut image2 = FirmwareImage::new();
+        let mut image2 = Image::new();
         image2.add_data(0x1000, vec![0x22; 16]);
 
         image1.merge(&image2).unwrap();
@@ -120,10 +128,10 @@ mod tests {
 
     #[test]
     fn test_merge_with_offset() {
-        let mut bootloader = FirmwareImage::new();
+        let mut bootloader = Image::new();
         bootloader.add_data(0x0000, vec![0xAA; 0x100]);
 
-        let mut app = FirmwareImage::new();
+        let mut app = Image::new();
         app.add_data(0x8000, vec![0xBB; 0x100]);
 
         // App offset to 0x8000
@@ -135,10 +143,10 @@ mod tests {
 
     #[test]
     fn test_merge_overlap_error() {
-        let mut image1 = FirmwareImage::new();
+        let mut image1 = Image::new();
         image1.add_data(0x0000, vec![0x11; 0x100]);  // 0x0000 - 0x00FF
 
-        let mut image2 = FirmwareImage::new();
+        let mut image2 = Image::new();
         image2.add_data(0x0080, vec![0x22; 0x100]);
 
         // will  overlap
@@ -149,10 +157,10 @@ mod tests {
 
     #[test]
     fn test_merge_empty_image() {
-        let mut image1 = FirmwareImage::new();
+        let mut image1 = Image::new();
         image1.add_data(0x0000, vec![0x11; 16]);
 
-        let image2 = FirmwareImage::new();  // empty image
+        let image2 = Image::new();  // empty image
 
         // should success
         image1.merge(&image2).unwrap();

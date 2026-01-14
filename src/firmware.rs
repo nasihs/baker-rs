@@ -3,14 +3,15 @@ mod image;
 mod formats;
 
 pub use error::FirmwareError;
-pub use image::FirmwareImage;
+pub use image::Image;
 pub use formats::ihex;
 pub use formats::binary;
+pub use image::{ImageReader, ImageWriter};
 
 use std::path::Path;
 
 /// Read firmware image from file, automatically detecting format by extension
-pub fn read(path: &Path, base_addr_for_bin: Option<u32>) -> Result<FirmwareImage, FirmwareError> {
+pub fn read(path: &Path, base_addr_for_bin: Option<u32>) -> Result<Image, FirmwareError> {
     let extension = path.extension()
         .and_then(|s| s.to_str())
         .unwrap_or("");

@@ -1,15 +1,37 @@
-use std::path::Path;
-use crate::firmware::{FirmwareError, Image};
+use std::path::{Path, PathBuf};
+use super::super::error::FirmwareError;
+use super::super::image::{Image, ImageReader, ImageWriter};
 
+pub struct BinWriter {
+    file: PathBuf,
+    fill_byte: u8,
+}
 
-pub fn read(path: &Path, base_addr: u32) -> Result<Image, FirmwareError> {
+pub struct BinReader {
+    file: PathBuf,
+    base_addr: u32,
+}
+
+impl ImageReader for BinReader {
+    fn read(&self) -> Result<Image, FirmwareError> {
+        read(&self.file, self.base_addr)
+    }
+}
+
+impl ImageWriter for BinWriter {
+    fn write(&self, image: &Image) -> Result<(), FirmwareError> {
+        write(image, &self.file, self.fill_byte)
+    }
+}
+
+fn read(path: &Path, base_addr: u32) -> Result<Image, FirmwareError> {
     let content = std::fs::read(path)?;
     let mut image = Image::new();
     image.add_data(base_addr, content.to_vec());
     Ok(image)
 }
 
-pub fn write(image: &Image, path: &Path, fill_byte: u8) -> Result<(), FirmwareError> {
+fn write(image: &Image, path: &Path, fill_byte: u8) -> Result<(), FirmwareError> {
     let (start, end) = image.address_range().ok_or(FirmwareError::EmptyImage)?;
     let size = (end - start + 1) as usize;
     let mut buffer = vec![fill_byte; size];
