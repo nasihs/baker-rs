@@ -7,9 +7,21 @@ pub struct BinWriter {
     fill_byte: u8,
 }
 
+impl BinWriter {
+    pub fn new(path: impl Into<PathBuf>, fill_byte: u8) -> Self {
+        Self { file: path.into(), fill_byte }
+    }
+}
+
 pub struct BinReader {
     file: PathBuf,
     base_addr: u32,
+}
+
+impl BinReader {
+    pub fn new(path: impl Into<PathBuf>, base_addr: u32) -> Self {
+        Self { file: path.into(), base_addr }
+    }
 }
 
 impl ImageReader for BinReader {

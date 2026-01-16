@@ -1,19 +1,35 @@
 use std::path::PathBuf;
 use std::fmt::{Display, Formatter};
-use crate::config::OutputFormat;
-use crate::firmware;
+use crate::firmware::{ImageReader, ImageWriter};
 use super::{Recipe, CookResult, RecipeError};
 
 pub struct MergeRecipe {
-    pub(crate) name: String,
-    pub(crate) description: Option<String>,
-    pub(crate) bootloader_path: PathBuf,
-    pub(crate) app_path: PathBuf,
-    pub(crate) base_addr: u32,
-    pub(crate) app_offset: u32,
-    pub(crate) fill_byte: u8,
-    pub(crate) output_path: PathBuf,
-    pub(crate) output_format: OutputFormat,
+    name: String,
+    description: Option<String>,
+    bootloader_reader: Box<dyn ImageReader>,
+    app_reader: Box<dyn ImageReader>,
+    writer: Box<dyn ImageWriter>,
+    output_path: PathBuf,
+}
+
+impl MergeRecipe {
+    pub fn new(
+        name: String,
+        description: Option<String>,
+        bootloader_reader: Box<dyn ImageReader>,
+        app_reader: Box<dyn ImageReader>,
+        writer: Box<dyn ImageWriter>,
+        output_path: PathBuf,
+    ) -> Self {
+        Self {
+            name,
+            description,
+            bootloader_reader,
+            app_reader,
+            writer,
+            output_path,
+        }
+    }
 }
 
 impl Recipe for MergeRecipe {
@@ -21,12 +37,13 @@ impl Recipe for MergeRecipe {
     fn description(&self) -> Option<&str> { self.description.as_deref() }
     
     fn cook(&self) -> Result<CookResult, RecipeError> {
-        println!("  Loading bootloader: {}", self.bootloader_path.display());
-        let mut image = firmware::read(&self.bootloader_path, Some(self.base_addr))?;
+        println!("  Loading bootloader...");
+        let mut image = self.bootloader_reader.read()?;
         
-        println!("  Loading app: {}", self.app_path.display());
-        let app = firmware::read(&self.app_path, Some(self.base_addr + self.app_offset))?;
+        println!("  Loading application...");
+        let app = self.app_reader.read()?;
         
+        println!("  Merging images...");
         image.merge(&app)?;
         
         // Ensure output directory exists
@@ -35,16 +52,7 @@ impl Recipe for MergeRecipe {
         }
         
         println!("  Writing: {}", self.output_path.display());
-        match self.output_format {
-            OutputFormat::Hex => firmware::ihex::write(&image, &self.output_path)?,
-            OutputFormat::Bin => firmware::binary::write(&image, &self.output_path, self.fill_byte)?,
-            OutputFormat::Srec => {
-                return Err(RecipeError::BuildFailed {
-                    name: self.name.clone(),
-                    reason: "SREC format not yet supported".to_string(),
-                });
-            }
-        }
+        self.writer.write(&image)?;
         
         Ok(CookResult::Single {
             name: self.name.clone(),
@@ -53,12 +61,8 @@ impl Recipe for MergeRecipe {
     }
     
     fn validate(&self) -> Result<(), RecipeError> {
-        if !self.bootloader_path.exists() {
-            return Err(RecipeError::InputNotFound(self.bootloader_path.clone()));
-        }
-        if !self.app_path.exists() {
-            return Err(RecipeError::InputNotFound(self.app_path.clone()));
-        }
+        // Validation is now done by trying to read via readers
+        // Could add file existence checks if paths are accessible
         Ok(())
     }
 }

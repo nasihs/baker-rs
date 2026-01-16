@@ -43,8 +43,10 @@ fn main() -> Result<()> {
             let resolved = cfg.resolve_targets(&targets)?;
             info!("Building targets: {:?}", resolved);
 
-            for target_name in resolved {
-                let recipe = builder.build(target_name)?;
+            // Batch build all recipes
+            let recipes = builder.build_batch(&resolved)?;
+            
+            for recipe in recipes {
                 recipe.validate()?;
                 recipe.cook()?;
             }

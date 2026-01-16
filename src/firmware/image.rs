@@ -2,11 +2,11 @@ use std::collections::BTreeMap;
 
 use super::FirmwareError;
 
-pub trait ImageReader {
+pub trait ImageReader: Send + Sync {
     fn read(&self) -> Result<Image, FirmwareError>;
 }
 
-pub trait ImageWriter {
+pub trait ImageWriter: Send + Sync {
     fn write(&self, image: &Image) -> Result<(), FirmwareError>;
 }
 

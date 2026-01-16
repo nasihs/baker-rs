@@ -1,5 +1,6 @@
 use std::path::{Path, PathBuf};
-use crate::config::{Bootloader, Config, MergeTarget, OtaTarget, Target};
+use crate::config::{Bootloader, Config, MergeTarget, OtaTarget, OutputFormat, Target};
+use crate::firmware::{self, ImageReader, ImageWriter};
 use super::{Recipe, RecipeError, MergeRecipe, OtaRecipe, GroupRecipe};
 
 pub struct RecipeBuilder<'a> {
@@ -26,6 +27,13 @@ impl<'a> RecipeBuilder<'a> {
         Err(RecipeError::TargetNotFound(name.to_string()))
     }
     
+    /// Creates multiple recipes by names (can be targets or groups)
+    pub fn build_batch(&self, names: &[&str]) -> Result<Vec<Box<dyn Recipe>>, RecipeError> {
+        names.iter()
+            .map(|name| self.build(name))
+            .collect()
+    }
+    
     fn build_target(&self, name: &str, target: &Target) -> Result<Box<dyn Recipe>, RecipeError> {
         match target {
             Target::Merge(t) => Ok(Box::new(self.build_merge(name, t)?) as Box<dyn Recipe>),
@@ -46,17 +54,24 @@ impl<'a> RecipeBuilder<'a> {
         let output_name = t.output_name.as_deref().unwrap_or(name);
         let output_path = output_dir.join(format!("{}.{}", output_name, t.output_format.extension()));
         
-        Ok(MergeRecipe {
-            name: name.to_string(),
-            description: t.description.clone(),
+        let bootloader_path = self.resolve_path(&bl_file);
+        let app_path = self.resolve_path(&t.app_file);
+        
+        // Create readers
+        let bootloader_reader = self.create_reader(&bootloader_path, Some(bl.base_addr))?;
+        let app_reader = self.create_reader(&app_path, Some(bl.base_addr + bl.app_offset))?;
+        
+        // Create writer
+        let writer = self.create_writer(&output_path, t.output_format, t.fill_byte)?;
+        
+        Ok(MergeRecipe::new(
+            name.to_string(),
+            t.description.clone(),
+            bootloader_reader,
+            app_reader,
+            writer,
             output_path,
-            bootloader_path: self.resolve_path(&bl_file),
-            app_path: self.resolve_path(&t.app_file),
-            base_addr: bl.base_addr,
-            app_offset: bl.app_offset,
-            fill_byte: t.fill_byte,
-            output_format: t.output_format,
-        })
+        ))
     }
     
     fn build_ota(&self, name: &str, t: &OtaTarget) -> Result<OtaRecipe, RecipeError> {
@@ -66,14 +81,22 @@ impl<'a> RecipeBuilder<'a> {
         let output_name = t.output_name.as_deref().unwrap_or(name);
         let output_path = output_dir.join(format!("{}.{}", output_name, t.output_format.extension()));
         
-        Ok(OtaRecipe {
-            name: name.to_string(),
-            description: t.description.clone(),
+        let app_path = self.resolve_path(&t.app_file);
+        
+        // Create reader
+        let app_reader = self.create_reader(&app_path, None)?;
+        
+        // Create writer
+        let writer = self.create_writer(&output_path, t.output_format, t.fill_byte)?;
+        
+        Ok(OtaRecipe::new(
+            name.to_string(),
+            t.description.clone(),
+            app_reader,
+            writer,
             output_path,
-            app_path: self.resolve_path(&t.app_file),
-            header_type: t.header.clone(),
-            output_format: t.output_format,
-        })
+            t.header.clone(),
+        ))
     }
     
     fn build_group(&self, name: &str, targets: &[String]) -> Result<Box<dyn Recipe>, RecipeError> {
@@ -91,6 +114,52 @@ impl<'a> RecipeBuilder<'a> {
             path.to_path_buf()
         } else {
             self.base_dir.join(path)
+        }
+    }
+    
+    /// Create an ImageReader based on file extension
+    fn create_reader(&self, path: &Path, base_addr: Option<u32>) -> Result<Box<dyn ImageReader>, RecipeError> {
+        if !path.exists() {
+            return Err(RecipeError::InputNotFound(path.to_path_buf()));
+        }
+        
+        let extension = path.extension()
+            .and_then(|s| s.to_str())
+            .unwrap_or("");
+        
+        match extension.to_lowercase().as_str() {
+            "hex" => Ok(Box::new(firmware::hex::HexReader::new(path))),
+            "bin" => {
+                let addr = base_addr.ok_or_else(|| RecipeError::BuildFailed {
+                    name: path.display().to_string(),
+                    reason: "Binary file requires base address".to_string(),
+                })?;
+                Ok(Box::new(firmware::bin::BinReader::new(path, addr)))
+            }
+            "srec" | "s19" | "s28" | "s37" => {
+                Err(RecipeError::BuildFailed {
+                    name: path.display().to_string(),
+                    reason: "SREC format not yet supported".to_string(),
+                })
+            }
+            _ => {
+                // Try hex as default
+                Ok(Box::new(firmware::hex::HexReader::new(path)))
+            }
+        }
+    }
+    
+    /// Create an ImageWriter based on output format
+    fn create_writer(&self, path: &Path, format: OutputFormat, fill_byte: u8) -> Result<Box<dyn ImageWriter>, RecipeError> {
+        match format {
+            OutputFormat::Hex => Ok(Box::new(firmware::hex::HexWriter::new(path))),
+            OutputFormat::Bin => Ok(Box::new(firmware::bin::BinWriter::new(path, fill_byte))),
+            OutputFormat::Srec => {
+                Err(RecipeError::BuildFailed {
+                    name: path.display().to_string(),
+                    reason: "SREC format not yet supported".to_string(),
+                })
+            }
         }
     }
 }

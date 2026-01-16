@@ -1,15 +1,36 @@
 use std::path::PathBuf;
 use std::fmt::{Display, Formatter};
-use crate::config::{OutputFormat, HeaderType};
+use crate::config::HeaderType;
+use crate::firmware::{ImageReader, ImageWriter};
 use super::{Recipe, CookResult, RecipeError};
 
 pub struct OtaRecipe {
-    pub(crate) name: String,
-    pub(crate) description: Option<String>,
-    pub(crate) output_path: PathBuf,
-    pub(crate) app_path: PathBuf,
-    pub(crate) header_type: HeaderType,
-    pub(crate) output_format: OutputFormat,
+    name: String,
+    description: Option<String>,
+    app_reader: Box<dyn ImageReader>,
+    writer: Box<dyn ImageWriter>,
+    output_path: PathBuf,
+    header_type: HeaderType,
+}
+
+impl OtaRecipe {
+    pub fn new(
+        name: String,
+        description: Option<String>,
+        app_reader: Box<dyn ImageReader>,
+        writer: Box<dyn ImageWriter>,
+        output_path: PathBuf,
+        header_type: HeaderType,
+    ) -> Self {
+        Self {
+            name,
+            description,
+            app_reader,
+            writer,
+            output_path,
+            header_type,
+        }
+    }
 }
 
 impl Recipe for OtaRecipe {
@@ -17,8 +38,40 @@ impl Recipe for OtaRecipe {
     fn description(&self) -> Option<&str> { self.description.as_deref() }
     
     fn cook(&self) -> Result<CookResult, RecipeError> {
-        // TODO: OTA implementation
-        println!("[{}] OTA packaging not yet implemented", self.name);
+        println!("  Loading application...");
+        let image = self.app_reader.read()?;
+        
+        // Add header based on type
+        match self.header_type {
+            HeaderType::None => {
+                println!("  No header needed");
+            }
+            HeaderType::OpenBlt => {
+                println!("  Adding OpenBLT header...");
+                // TODO: Implement OpenBLT header
+                return Err(RecipeError::BuildFailed {
+                    name: self.name.clone(),
+                    reason: "OpenBLT header not yet implemented".to_string(),
+                });
+            }
+            HeaderType::Custom => {
+                println!("  Adding custom header...");
+                // TODO: Implement custom header
+                return Err(RecipeError::BuildFailed {
+                    name: self.name.clone(),
+                    reason: "Custom header not yet implemented".to_string(),
+                });
+            }
+        }
+        
+        // Ensure output directory exists
+        if let Some(parent) = self.output_path.parent() {
+            std::fs::create_dir_all(parent)?;
+        }
+        
+        println!("  Writing: {}", self.output_path.display());
+        self.writer.write(&image)?;
+        
         Ok(CookResult::Single {
             name: self.name.clone(),
             output_path: self.output_path.clone(),
@@ -26,9 +79,7 @@ impl Recipe for OtaRecipe {
     }
     
     fn validate(&self) -> Result<(), RecipeError> {
-        if !self.app_path.exists() {
-            return Err(RecipeError::InputNotFound(self.app_path.clone()));
-        }
+        // Validation is now done by trying to read via readers
         Ok(())
     }
 }

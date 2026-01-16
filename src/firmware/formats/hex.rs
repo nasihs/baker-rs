@@ -7,8 +7,20 @@ pub struct HexReader {
     file: PathBuf,
 }
 
+impl HexReader {
+    pub fn new(path: impl Into<PathBuf>) -> Self {
+        Self { file: path.into() }
+    }
+}
+
 pub struct HexWriter {
     file: PathBuf,
+}
+
+impl HexWriter {
+    pub fn new(path: impl Into<PathBuf>) -> Self {
+        Self { file: path.into() }
+    }
 }
 
 impl ImageReader for HexReader {
