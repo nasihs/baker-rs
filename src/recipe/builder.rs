@@ -81,6 +81,11 @@ impl<'a> RecipeBuilder<'a> {
         let output_name = t.output_name.as_deref().unwrap_or(name);
         let output_path = output_dir.join(format!("{}.{}", output_name, t.output_format.extension()));
         let app_path = self.resolve_path(&t.app_file);
+        let extension = t.app_file.extension()
+            .and_then(|s| s.to_str())
+            .ok_or(RecipeError::NoExtension)?;
+        // let base_addr = self.config.bootloaders.get(&t.header) if extension == "bin"
+
         let app_reader = self.create_reader(&app_path, None)?;
         let writer = self.create_writer(&output_path, t.output_format, t.fill_byte)?;
         
@@ -135,8 +140,7 @@ impl<'a> RecipeBuilder<'a> {
                 Ok(Box::new(firmware::srec::SrecReader::new(path)))
             }
             _ => {
-                // Try hex as default
-                Ok(Box::new(firmware::hex::HexReader::new(path)))
+                Err(RecipeError::UnsupportedFormat(extension.to_owned()))
             }
         }
     }

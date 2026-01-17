@@ -20,9 +20,6 @@ pub enum FirmwareError {
     #[error("failed to parse srec: {0}")]
     SrecParse(#[from] srec::reader::Error),
 
-    // #[error("failed to write srec: {0}")]
-    // SrecWrite(#[from] srec::writer::Error),
-
     #[error("{0}")]
     InvalidFormat(String),
 
