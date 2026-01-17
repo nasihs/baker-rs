@@ -18,6 +18,12 @@ pub enum RecipeError {
     #[error("config error: {0}")]
     Config(#[from] crate::config::ConfigError),
 
+    #[error("no extension")]
+    NoExtension,
+
+    #[error("unsupported format: {0}")]
+    UnsupportedFormat(String),
+
     #[error("firmware error: {0}")]
     Firmware(#[from] crate::firmware::FirmwareError),
 
