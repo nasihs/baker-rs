@@ -4,7 +4,7 @@ use crate::config::HeaderType;
 use crate::firmware::{ImageReader, ImageWriter};
 use super::{Recipe, CookResult, RecipeError};
 
-pub struct OtaRecipe {
+pub struct PackRecipe {
     name: String,
     description: Option<String>,
     app_reader: Box<dyn ImageReader>,
@@ -13,7 +13,7 @@ pub struct OtaRecipe {
     header_type: HeaderType,
 }
 
-impl OtaRecipe {
+impl PackRecipe {
     pub fn new(
         name: String,
         description: Option<String>,
@@ -33,7 +33,7 @@ impl OtaRecipe {
     }
 }
 
-impl Recipe for OtaRecipe {
+impl Recipe for PackRecipe {
     fn name(&self) -> &str { &self.name }
     fn description(&self) -> Option<&str> { self.description.as_deref() }
     
@@ -84,9 +84,9 @@ impl Recipe for OtaRecipe {
     }
 }
 
-impl Display for OtaRecipe {
+impl Display for PackRecipe {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{:<15} [ota]", self.name)?;
+        write!(f, "{:<15} [pack]", self.name)?;
         if let Some(desc) = &self.description {
             write!(f, " {}", desc)?;
         }

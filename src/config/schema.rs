@@ -54,7 +54,7 @@ pub struct Bootloader {
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum Target {
     Merge(MergeTarget),
-    Ota(OtaTarget),
+    Pack(PackTarget),
 }
 
 impl Target {
@@ -62,14 +62,14 @@ impl Target {
     pub fn description(&self) -> Option<&str> {
         match self {
             Target::Merge(t) => t.description.as_deref(),
-            Target::Ota(t) => t.description.as_deref(),
+            Target::Pack(t) => t.description.as_deref(),
         }
     }
 
     pub fn output_name(&self) -> Option<&str> {
         match self {
             Target::Merge(t) => t.output_name.as_deref(),
-            Target::Ota(t) => t.output_name.as_deref(),
+            Target::Pack(t) => t.output_name.as_deref(),
         }
     }
 }
@@ -89,7 +89,7 @@ pub struct MergeTarget {
 }
 
 #[derive(Debug, Deserialize)]
-pub struct OtaTarget {
+pub struct PackTarget {
     pub description: Option<String>,
     pub header: HeaderType,
     #[serde(default)]

@@ -1,7 +1,7 @@
 use std::path::{Path, PathBuf};
-use crate::config::{Bootloader, Config, MergeTarget, OtaTarget, OutputFormat, Target};
+use crate::config::{Bootloader, Config, MergeTarget, PackTarget, OutputFormat, Target};
 use crate::firmware::{self, ImageReader, ImageWriter};
-use super::{Recipe, RecipeError, MergeRecipe, OtaRecipe, GroupRecipe};
+use super::{Recipe, RecipeError, MergeRecipe, PackRecipe, GroupRecipe};
 
 pub struct RecipeBuilder<'a> {
     config: &'a Config,
@@ -37,7 +37,7 @@ impl<'a> RecipeBuilder<'a> {
     fn build_target(&self, name: &str, target: &Target) -> Result<Box<dyn Recipe>, RecipeError> {
         match target {
             Target::Merge(t) => Ok(Box::new(self.build_merge(name, t)?) as Box<dyn Recipe>),
-            Target::Ota(t) => Ok(Box::new(self.build_ota(name, t)?) as Box<dyn Recipe>),
+            Target::Pack(t) => Ok(Box::new(self.build_pack(name, t)?) as Box<dyn Recipe>),
         }
     }
     
@@ -74,22 +74,17 @@ impl<'a> RecipeBuilder<'a> {
         ))
     }
     
-    fn build_ota(&self, name: &str, t: &OtaTarget) -> Result<OtaRecipe, RecipeError> {
+    fn build_pack(&self, name: &str, t: &PackTarget) -> Result<PackRecipe, RecipeError> {
         let output_dir = self.resolve_path(
             t.output_dir.as_deref().unwrap_or(&self.config.output.dir)
         );
         let output_name = t.output_name.as_deref().unwrap_or(name);
         let output_path = output_dir.join(format!("{}.{}", output_name, t.output_format.extension()));
-        
         let app_path = self.resolve_path(&t.app_file);
-        
-        // Create reader
         let app_reader = self.create_reader(&app_path, None)?;
-        
-        // Create writer
         let writer = self.create_writer(&output_path, t.output_format, t.fill_byte)?;
         
-        Ok(OtaRecipe::new(
+        Ok(PackRecipe::new(
             name.to_string(),
             t.description.clone(),
             app_reader,
@@ -137,10 +132,7 @@ impl<'a> RecipeBuilder<'a> {
                 Ok(Box::new(firmware::bin::BinReader::new(path, addr)))
             }
             "srec" | "s19" | "s28" | "s37" => {
-                Err(RecipeError::BuildFailed {
-                    name: path.display().to_string(),
-                    reason: "SREC format not yet supported".to_string(),
-                })
+                Ok(Box::new(firmware::srec::SrecReader::new(path)))
             }
             _ => {
                 // Try hex as default
@@ -154,12 +146,7 @@ impl<'a> RecipeBuilder<'a> {
         match format {
             OutputFormat::Hex => Ok(Box::new(firmware::hex::HexWriter::new(path))),
             OutputFormat::Bin => Ok(Box::new(firmware::bin::BinWriter::new(path, fill_byte))),
-            OutputFormat::Srec => {
-                Err(RecipeError::BuildFailed {
-                    name: path.display().to_string(),
-                    reason: "SREC format not yet supported".to_string(),
-                })
-            }
+            OutputFormat::Srec => Ok(Box::new(firmware::srec::SrecWriter::new(path))),
         }
     }
 }

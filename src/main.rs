@@ -60,7 +60,7 @@ fn main() -> Result<()> {
                 let desc = target.description().unwrap_or("-");
                 let type_str = match target {
                     config::Target::Merge(_) => "merge",
-                    config::Target::Ota(_) => "ota",
+                    config::Target::Pack(_) => "pack",
                 };
                 println!("  {:<15} [{}] {}", name, type_str, desc);
             }

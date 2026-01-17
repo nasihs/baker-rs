@@ -1,12 +1,12 @@
 mod error;
 mod merge;
-mod ota;
+mod pack;
 mod group;
 mod builder;
 
 pub use error::RecipeError;
 pub use merge::MergeRecipe;
-pub use ota::OtaRecipe;
+pub use pack::PackRecipe;
 pub use group::GroupRecipe;
 pub use builder::RecipeBuilder;
 
