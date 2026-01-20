@@ -74,6 +74,39 @@ impl Image {
         }
         Ok(())
     }
+    
+    /// Get continuous binary data from the first segment
+    /// Useful when the image has a single continuous segment (e.g., for app binary)
+    pub fn to_continuous_data(&self) -> Result<Vec<u8>, FirmwareError> {
+        if self.segments.is_empty() {
+            return Ok(Vec::new());
+        }
+        
+        if self.segments.len() == 1 {
+            // Single segment, return directly
+            let (_, data) = self.segments.first_key_value().unwrap();
+            return Ok(data.clone());
+        }
+        
+        // Multiple segments, need to fill gaps
+        let (start, end) = self.address_range().unwrap();
+        let size = (end - start + 1) as usize;
+        let mut result = vec![0xFF; size]; // Fill with 0xFF by default
+        
+        for (addr, data) in &self.segments {
+            let offset = (addr - start) as usize;
+            result[offset..offset + data.len()].copy_from_slice(data);
+        }
+        
+        Ok(result)
+    }
+    
+    /// Create an image from continuous binary data at a specific address
+    pub fn from_continuous_data(base_addr: u32, data: Vec<u8>) -> Self {
+        let mut image = Image::new();
+        image.add_data(base_addr, data);
+        image
+    }
 }
 
 

@@ -1,35 +1,87 @@
 use std::path::PathBuf;
 use std::fmt::{Display, Formatter};
-use crate::config::HeaderType;
+use std::collections::HashMap;
 use crate::firmware::{ImageReader, ImageWriter};
 use super::{Recipe, CookResult, RecipeError};
 
-pub struct PackRecipe {
-    name: String,
-    description: Option<String>,
-    app_reader: Box<dyn ImageReader>,
-    writer: Box<dyn ImageWriter>,
-    output_path: PathBuf,
-    header_type: HeaderType,
+/// Create .delbin file under builtin_headers to add new builtin header support
+macro_rules! define_builtin_headers {
+    ($($name:literal => $file:literal),* $(,)?) => {
+        pub struct BuiltinHeaders;
+
+        impl BuiltinHeaders {
+            pub fn names() -> &'static [&'static str] {
+                &[$($name),*]
+            }
+            
+            pub fn is_builtin(name: &str) -> bool {
+                Self::names().contains(&name)
+            }
+            
+            pub fn get_dsl(name: &str) -> Option<&'static str> {
+                match name {
+                    $($name => Some(include_str!($file)),)*
+                    _ => None,
+                }
+            }
+        }
+    };
 }
 
-impl PackRecipe {
-    pub fn new(
-        name: String,
-        description: Option<String>,
-        app_reader: Box<dyn ImageReader>,
-        writer: Box<dyn ImageWriter>,
-        output_path: PathBuf,
-        header_type: HeaderType,
-    ) -> Self {
-        Self {
-            name,
-            description,
-            app_reader,
-            writer,
-            output_path,
-            header_type,
+// add new header definition here
+define_builtin_headers! {
+    "mota" => "builtin_headers/mota.delbin",
+}
+
+pub struct PackRecipe {
+    pub(super) name: String,
+    pub(super) description: Option<String>,
+    pub(super) app_reader: Box<dyn ImageReader>,
+    pub(super) writer: Box<dyn ImageWriter>,
+    pub(super) output_path: PathBuf,
+    pub(super) header_builder: HeaderBuilder,
+}
+
+pub(super) struct HeaderBuilder {
+    header_name: String,
+    dsl: String,
+}
+
+impl HeaderBuilder {
+    pub fn new_validated(header_name: String, dsl: String) -> Result<Self, RecipeError> {
+        // validate grammar with blank image
+        let env: HashMap<String, delbin::Value> = HashMap::new();
+        let mut sections: HashMap<String, Vec<u8>> = HashMap::new();
+        sections.insert("image".to_string(), Vec::new());
+        
+        match delbin::generate(&dsl, &env, &sections) {
+            Ok(_) => {
+                Ok(Self { 
+                    header_name,
+                    dsl,
+                })
+            }
+            Err(e) => {
+                Err(RecipeError::HeaderInvalid {
+                    header_name: header_name.clone(),
+                    reason: format!("{}", e),
+                })
+            }
         }
+    }
+    
+    /// Generate binary header
+    pub fn generate(&self, app_data: &[u8]) -> Result<Vec<u8>, RecipeError> {
+        let env: HashMap<String, delbin::Value> = HashMap::new();
+        let mut sections: HashMap<String, Vec<u8>> = HashMap::new();
+        sections.insert("image".to_string(), app_data.to_vec());
+        
+        delbin::generate(&self.dsl, &env, &sections)
+            .map(|r| r.data)
+            .map_err(|e| RecipeError::BuildFailed {
+                name: self.header_name.clone(),
+                reason: format!("Failed to generate header: {}", e),
+            })
     }
 }
 
@@ -41,28 +93,25 @@ impl Recipe for PackRecipe {
         println!("  Loading application...");
         let image = self.app_reader.read()?;
         
-        // Add header based on type
-        match self.header_type {
-            HeaderType::None => {
-                println!("  No header needed");
-            }
-            HeaderType::OpenBlt => {
-                println!("  Adding OpenBLT header...");
-                // TODO: Implement OpenBLT header
-                return Err(RecipeError::BuildFailed {
-                    name: self.name.clone(),
-                    reason: "OpenBLT header not yet implemented".to_string(),
-                });
-            }
-            HeaderType::Custom => {
-                println!("  Adding custom header...");
-                // TODO: Implement custom header
-                return Err(RecipeError::BuildFailed {
-                    name: self.name.clone(),
-                    reason: "Custom header not yet implemented".to_string(),
-                });
-            }
-        }
+        println!("  Generating custom header...");
+        
+        // Get continuous app data for header generation
+        let app_data = image.to_continuous_data()?;
+        let header_data = self.header_builder.generate(&app_data)?;
+        
+        // Get original base address
+        let (base_addr, _) = image.address_range()
+            .ok_or_else(|| RecipeError::BuildFailed {
+                name: self.name.clone(),
+                reason: "Empty image".to_string(),
+            })?;
+        
+        // Create new image with header prepended
+        let mut new_image = crate::firmware::Image::new();
+        new_image.add_data(base_addr, header_data.clone());
+        new_image.add_data(base_addr + header_data.len() as u32, app_data);
+        
+        println!("  Header generated ({} bytes)", header_data.len());
         
         // Ensure output directory exists
         if let Some(parent) = self.output_path.parent() {
@@ -70,7 +119,7 @@ impl Recipe for PackRecipe {
         }
         
         println!("  Writing: {}", self.output_path.display());
-        self.writer.write(&image)?;
+        self.writer.write(&new_image)?;
         
         Ok(CookResult::Single {
             name: self.name.clone(),

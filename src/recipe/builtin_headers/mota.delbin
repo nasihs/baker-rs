@@ -1,0 +1,17 @@
+@endian = little;
+
+struct header @packed {
+    magic:          [u8; 4] = @bytes("fpk\0");
+    config:     	u32 = 0;
+    old_versino:	[u8; 16];
+    new_version:    [u8; 16] = [1,2,3];
+    watermark:      [u8; 16] = @bytes("DELBIN_DEMO");
+    partition:		[u8; 16] = @bytes("app");
+    img_size:       u32 = @sizeof(image);
+    packed_size:    u32 = @sizeof(image);
+    timestamp:      u32 = ${UNIX_STAMP};
+    img_crc32:      u32 = @crc32(image);
+    packed_crc32:   u32 = 0;
+    header_crc32:   u32 = @crc32(@self[..header_crc32]);
+    _padding:       [u8; 1024 - @offsetof(_padding)];
+}

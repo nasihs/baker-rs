@@ -32,4 +32,18 @@ pub enum RecipeError {
 
     #[error("build failed for '{name}': {reason}")]
     BuildFailed { name: String, reason: String },
+
+    #[error("header '{header_name}' has invalid DSL definition: {reason}")]
+    HeaderInvalid { 
+        header_name: String, 
+        reason: String 
+    },
+
+    #[error("header '{0}' not found (not built-in or defined in [headers])")]
+    HeaderNotFound(String),
+
+    #[error("header '{name}' already exists as built-in header, please use a different name")]
+    HeaderExists { 
+        name: String,
+    },
 }
