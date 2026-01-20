@@ -3,6 +3,7 @@ use std::path::Path;
 use super::error::ConfigError;
 use super::schema::{Config, Group, Target, Bootloader};
 
+#[allow(dead_code)]
 fn validate(config: &Config) -> Result<(), ConfigError> {  // TODO move to impl 
     // 验证 targets 中引用的 bootloader 存在
     for (name, target) in &config.targets {
@@ -64,14 +65,17 @@ impl Config {
     }
 
 
+    #[allow(unused_variables)]
     fn validate_bootloader(&self, bl: &Bootloader) -> Result<(), ConfigError> {
         todo!()
     }
 
+    #[allow(unused_variables)]
     fn validate_target(&self, target: &Target) -> Result<(), ConfigError> {
         todo!()
     }
 
+    #[allow(unused_variables)]
     fn validate_group(&self, group: &Group) -> Result<(), ConfigError> {
         todo!()
     }
@@ -86,9 +90,10 @@ impl Config {
             for name in specified {
                 self.expand_target_or_group(name, &mut result)?;
             }
+        } else {
+            self.expand_target_or_group(&self.project.default, &mut result)?;
         }
 
-        self.expand_target_or_group(&self.project.default, &mut result)?;
         return Ok(result);
     }
 

@@ -6,7 +6,7 @@ use super::{Recipe, CookResult, RecipeError};
 
 /// Create .delbin file under builtin_headers to add new builtin header support
 macro_rules! define_builtin_headers {
-    ($($name:literal => $file:literal),* $(,)?) => {
+    ($($name:literal => ($file:literal, $suffix:literal)),* $(,)?) => {
         pub struct BuiltinHeaders;
 
         impl BuiltinHeaders {
@@ -24,13 +24,20 @@ macro_rules! define_builtin_headers {
                     _ => None,
                 }
             }
+            
+            pub fn get_suffix(name: &str) -> Option<&'static str> {
+                match name {
+                    $($name => Some($suffix),)*
+                    _ => None,
+                }
+            }
         }
     };
 }
 
 // add new header definition here
 define_builtin_headers! {
-    "mota" => "builtin_headers/mota.delbin",
+    "mota" => ("builtin_headers/mota.delbin", "fpk"),
 }
 
 pub struct PackRecipe {

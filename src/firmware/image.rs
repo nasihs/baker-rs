@@ -60,8 +60,8 @@ impl Image {
             return Ok(());
         };
 
-        let other_start = other_start + 0;
-        let other_end = other_end + 0;
+        // let other_start = other_start + 0;
+        // let other_end = other_end + 0;
 
         if let Some((start, end)) = self.address_range() {
             // if other_start <= end && start <= other_end {

@@ -31,7 +31,6 @@ impl<'a> RecipeBuilder<'a> {
         Err(RecipeError::TargetNotFound(name.to_string()))
     }
     
-    /// 验证配置中的 headers 不与内置冲突
     fn validate_headers(&self) -> Result<(), RecipeError> {
         for header_name in self.config.headers.keys() {
             if BuiltinHeaders::is_builtin(header_name) {
@@ -112,30 +111,28 @@ impl<'a> RecipeBuilder<'a> {
     }
     
     fn build_pack(&self, name: &str, t: &PackTarget) -> Result<PackRecipe, RecipeError> {
+        let header_name = &t.header;
+        
+        let (dsl, suffix) = if let Some(builtin_dsl) = BuiltinHeaders::get_dsl(header_name) {
+            let suffix = BuiltinHeaders::get_suffix(header_name)
+                .expect("builtin header must have suffix");
+            (builtin_dsl.to_string(), suffix.to_string())
+        } else if let Some(header_def) = self.config.headers.get(header_name) {
+            (header_def.def.clone(), header_def.suffix.clone())
+        } else {
+            return Err(RecipeError::HeaderNotFound(header_name.clone()));
+        };
+        
         let output_dir = self.resolve_path(
             t.output_dir.as_deref().unwrap_or(&self.config.env.output.dir)
         );
         let output_name = t.output_name.as_deref().unwrap_or(name);
-        let output_path = output_dir.join(format!("{}.{}", output_name, t.output_format.extension()));
+        let output_path = output_dir.join(format!("{}.{}", output_name, suffix));
         let app_path = self.resolve_path(&t.app_file);
         
-        let app_reader = self.create_reader(&app_path, None)?;
-        let writer = self.create_writer(&output_path, t.output_format, t.fill_byte)?;
+        let app_reader = self.create_reader(&app_path, t.app_offset)?;
+        let writer = self.create_writer(&output_path, OutputFormat::Bin, t.fill_byte)?;
         
-        // 查找 header 定义（先内置，后用户定义）
-        let header_name = &t.header;
-        let dsl = if let Some(builtin_dsl) = BuiltinHeaders::get_dsl(header_name) {
-            // 使用内置 DSL
-            builtin_dsl.to_string()
-        } else if let Some(header_def) = self.config.headers.get(header_name) {
-            // 使用用户定义的 DSL
-            header_def.def.clone()
-        } else {
-            // 既不是内置也不在配置中
-            return Err(RecipeError::HeaderNotFound(header_name.clone()));
-        };
-        
-        // 创建并验证 header builder（在构造阶段验证 DSL）
         let header_builder = HeaderBuilder::new_validated(
             header_name.clone(),
             dsl
