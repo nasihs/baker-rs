@@ -3,7 +3,6 @@ use std::path::Path;
 use super::error::ConfigError;
 use super::schema::{Config, Group, Target, Bootloader};
 
-/// 验证配置有效性
 fn validate(config: &Config) -> Result<(), ConfigError> {  // TODO move to impl 
     // 验证 targets 中引用的 bootloader 存在
     for (name, target) in &config.targets {

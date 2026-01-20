@@ -2,7 +2,7 @@
 name = "test_firmware"
 default = "test"
 
-[output]
+[env.output]
 dir = "release"
 
 [bootloaders.main]
@@ -10,17 +10,57 @@ file = "build/bt.hex"
 base_addr = 0x0800_0000
 app_offset = 0x8000
 
+# custom header definiton
+[headers.custom_fpk]
+def = """
+@endian = little;
+
+struct header @packed {
+    magic:          [u8; 4] = @bytes("fpk");
+    config:         u32 = 0;
+    old_version:    [u8; 16];
+    new_version:    [u8; 16] = [1,2,3];
+    watermark:      [u8; 16] = @bytes("DELBIN_DEMO");
+    partition:      [u8; 16] = @bytes("app");
+    img_size:       u32 = @sizeof(image);
+    packed_size:    u32 = @sizeof(image);
+    timestamp:      u32 = 0;
+    img_crc32:      u32 = @crc32(image);
+    packed_crc32:   u32 = 0;
+    header_crc32:   u32 = @crc32(@self[..header_crc32]);
+    _padding:       [u8; 1024 - @offsetof(_padding)];
+}
+"""
+
+# [headers.mota]
+# def = "..."  # Error: HeaderExists, mota is a builtin header
+
 [targets.merge_test]
 type = "merge"
-description = "Test only"
+description = "Merge bootloader and app"
 bootloader = "main"
 app_file = "build/app.hex"
 output_format = "hex"
 output_name = "test_merge"
 
-[targets.pack_test_srec]
+[targets.pack_with_custom]
 type = "pack"
-description = "Test srec packing"
-bootloader = "main"
+description = "Pack with custom header"
+header = "custom_fpk"  # use custom header
 app_file = "build/app.hex"
-output_format = ""
+output_format = "bin"
+output_name = "app_custom"
+
+[targets.convert_to_bin]
+type = "convert"
+description = "Convert hex to bin without header"
+input_file = "build/app.hex"
+output_format = "bin"
+output_name = "app_plain"
+
+[targets.convert_to_srec]
+type = "convert"
+description = "Convert to S-record format"
+input_file = "build/app.hex"
+output_format = "srec"
+output_name = "app"

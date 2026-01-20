@@ -8,9 +8,11 @@ pub struct Config {
     // #[serde(default)]
     // pub version: Option<VersionConfig>,  // TODO
     #[serde(default)]
-    pub output: OutputConfig,
+    pub env: Env,
     #[serde(default)]
     pub bootloaders: HashMap<String, Bootloader>,
+    #[serde(default)]
+    pub headers: HashMap<String, HeaderDef>,
     #[serde(default)]
     pub targets: HashMap<String, Target>,
     #[serde(default)]
@@ -21,6 +23,12 @@ pub struct Config {
 pub struct Project {
     pub name: String,
     pub default: String,
+}
+
+#[derive(Debug, Deserialize, Default)]
+pub struct Env {
+    #[serde(default)]
+    pub output: OutputConfig,
 }
 
 #[derive(Debug, Deserialize)]
@@ -41,6 +49,11 @@ fn default_output_dir() -> PathBuf {
     PathBuf::from("output")
 }
 
+#[derive(Debug, Deserialize, Clone)]
+pub struct HeaderDef {
+    pub def: String,
+}
+
 #[derive(Debug, Deserialize)]
 pub struct Bootloader {
     pub file: Option<PathBuf>,   // check when recipe runs
@@ -55,6 +68,7 @@ pub struct Bootloader {
 pub enum Target {
     Merge(MergeTarget),
     Pack(PackTarget),
+    Convert(ConvertTarget),
 }
 
 impl Target {
@@ -63,6 +77,7 @@ impl Target {
         match self {
             Target::Merge(t) => t.description.as_deref(),
             Target::Pack(t) => t.description.as_deref(),
+            Target::Convert(t) => t.description.as_deref(),
         }
     }
 
@@ -70,6 +85,7 @@ impl Target {
         match self {
             Target::Merge(t) => t.output_name.as_deref(),
             Target::Pack(t) => t.output_name.as_deref(),
+            Target::Convert(t) => t.output_name.as_deref(),
         }
     }
 }
@@ -89,11 +105,24 @@ pub struct MergeTarget {
 }
 
 #[derive(Debug, Deserialize)]
+pub struct ConvertTarget {
+    pub description: Option<String>,
+    pub input_file: PathBuf,
+    
+    #[serde(default = "default_fill_byte")]
+    pub fill_byte: u8,
+    
+    #[serde(default)]
+    pub output_format: OutputFormat,
+    
+    pub output_name: Option<String>,
+    pub output_dir: Option<PathBuf>,
+}
+
+#[derive(Debug, Deserialize)]
 pub struct PackTarget {
     pub description: Option<String>,
-    pub header: HeaderType,
-    #[serde(default)]
-    pub header_def: Option<String>,  // for header: custom only
+    pub header: String,  // use builtin header type or custom which defined in baker.toml -> headers
     pub app_file: PathBuf,
     #[serde(default = "default_fill_byte")]
     pub fill_byte: u8,
@@ -104,15 +133,6 @@ pub struct PackTarget {
     pub output_dir: Option<PathBuf>,
 }
 
-
-#[derive(Debug, Default, Clone, Copy, Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "snake_case")]
-pub enum HeaderType {
-    #[default]
-    None,
-    OpenBlt,
-    Custom,
-}
 
 #[derive(Debug, Default, Clone, Copy, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]

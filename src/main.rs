@@ -5,26 +5,6 @@ use baker_rs::cli::{self, Command};
 use baker_rs::config::{self, Config};
 use baker_rs::recipe::RecipeBuilder;
 
-static TEST_TOML: &str = r##"
-    name = "test_firmware"
-    default = "test"
-
-    [output]
-    dir = "release"
-
-    [bootloaders.main]
-    file = "build/bt.hex"
-    base_addr = 0x0800_0000
-    app_offset = 0x8000
-
-    [targets.test]
-    type = "merge"
-    description = "Test only"
-    bootloader = "main"
-    app_file = "build/app.hex"
-    output_format = "hex"
-    output_name = "test_merge"
-"##;
 
 fn main() -> Result<()> {
     let cli = cli::parse();
@@ -61,6 +41,7 @@ fn main() -> Result<()> {
                 let type_str = match target {
                     config::Target::Merge(_) => "merge",
                     config::Target::Pack(_) => "pack",
+                    config::Target::Convert(_) => "convert",
                 };
                 println!("  {:<15} [{}] {}", name, type_str, desc);
             }

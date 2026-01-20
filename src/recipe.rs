@@ -1,12 +1,14 @@
 mod error;
 mod merge;
 mod pack;
+mod convert;
 mod group;
 mod builder;
 
 pub use error::RecipeError;
 pub use merge::MergeRecipe;
-pub use pack::PackRecipe;
+pub use pack::{PackRecipe, BuiltinHeaders};
+pub use convert::ConvertRecipe;
 pub use group::GroupRecipe;
 pub use builder::RecipeBuilder;
 

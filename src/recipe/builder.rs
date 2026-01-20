@@ -1,7 +1,8 @@
 use std::path::{Path, PathBuf};
-use crate::config::{Bootloader, Config, MergeTarget, PackTarget, OutputFormat, Target};
+use crate::config::{Bootloader, Config, ConvertTarget, MergeTarget, PackTarget, OutputFormat, Target};
 use crate::firmware::{self, ImageReader, ImageWriter};
-use super::{Recipe, RecipeError, MergeRecipe, PackRecipe, GroupRecipe};
+use super::{Recipe, RecipeError, MergeRecipe, PackRecipe, ConvertRecipe, GroupRecipe, BuiltinHeaders};
+use super::pack::HeaderBuilder;
 
 pub struct RecipeBuilder<'a> {
     config: &'a Config,
@@ -18,6 +19,9 @@ impl<'a> RecipeBuilder<'a> {
     
     /// Creates a Recipe by name (can be a target or group)
     pub fn build(&self, name: &str) -> Result<Box<dyn Recipe>, RecipeError> {
+        // 验证 headers 不与内置冲突
+        self.validate_headers()?;
+        
         if let Some(group) = self.config.groups.get(name) {
             return self.build_group(name, group.targets());
         }
@@ -25,6 +29,18 @@ impl<'a> RecipeBuilder<'a> {
             return self.build_target(name, target);
         }
         Err(RecipeError::TargetNotFound(name.to_string()))
+    }
+    
+    /// 验证配置中的 headers 不与内置冲突
+    fn validate_headers(&self) -> Result<(), RecipeError> {
+        for header_name in self.config.headers.keys() {
+            if BuiltinHeaders::is_builtin(header_name) {
+                return Err(RecipeError::HeaderExists {
+                    name: header_name.clone(),
+                });
+            }
+        }
+        Ok(())
     }
     
     /// Creates multiple recipes by names (can be targets or groups)
@@ -36,8 +52,9 @@ impl<'a> RecipeBuilder<'a> {
     
     fn build_target(&self, name: &str, target: &Target) -> Result<Box<dyn Recipe>, RecipeError> {
         match target {
-            Target::Merge(t) => Ok(Box::new(self.build_merge(name, t)?) as Box<dyn Recipe>),
-            Target::Pack(t) => Ok(Box::new(self.build_pack(name, t)?) as Box<dyn Recipe>),
+            Target::Merge(t) => Ok(Box::new(self.build_merge(name, t)?)),
+            Target::Pack(t) => Ok(Box::new(self.build_pack(name, t)?)),
+            Target::Convert(t) => Ok(Box::new(self.build_convert(name, t)?)),
         }
     }
     
@@ -49,7 +66,7 @@ impl<'a> RecipeBuilder<'a> {
             .ok_or_else(|| RecipeError::BootloaderFileNotSpecified(t.bootloader.clone()))?;
         
         let output_dir = self.resolve_path(
-            t.output_dir.as_deref().unwrap_or(&self.config.output.dir)
+            t.output_dir.as_deref().unwrap_or(&self.config.env.output.dir)
         );
         let output_name = t.output_name.as_deref().unwrap_or(name);
         let output_path = output_dir.join(format!("{}.{}", output_name, t.output_format.extension()));
@@ -64,39 +81,74 @@ impl<'a> RecipeBuilder<'a> {
         // Create writer
         let writer = self.create_writer(&output_path, t.output_format, t.fill_byte)?;
         
-        Ok(MergeRecipe::new(
-            name.to_string(),
-            t.description.clone(),
+        Ok(MergeRecipe {
+            name: name.to_string(),
+            description: t.description.clone(),
             bootloader_reader,
             app_reader,
             writer,
             output_path,
-        ))
+        })
+    }
+    
+    fn build_convert(&self, name: &str, t: &ConvertTarget) -> Result<ConvertRecipe, RecipeError> {
+        let output_dir = self.resolve_path(
+            t.output_dir.as_deref().unwrap_or(&self.config.env.output.dir)
+        );
+        let output_name = t.output_name.as_deref().unwrap_or(name);
+        let output_path = output_dir.join(format!("{}.{}", output_name, t.output_format.extension()));
+        
+        let input_path = self.resolve_path(&t.input_file);
+        let reader = self.create_reader(&input_path, None)?;
+        let writer = self.create_writer(&output_path, t.output_format, t.fill_byte)?;
+        
+        Ok(ConvertRecipe {
+            name: name.to_string(),
+            description: t.description.clone(),
+            reader,
+            writer,
+            output_path,
+        })
     }
     
     fn build_pack(&self, name: &str, t: &PackTarget) -> Result<PackRecipe, RecipeError> {
         let output_dir = self.resolve_path(
-            t.output_dir.as_deref().unwrap_or(&self.config.output.dir)
+            t.output_dir.as_deref().unwrap_or(&self.config.env.output.dir)
         );
         let output_name = t.output_name.as_deref().unwrap_or(name);
         let output_path = output_dir.join(format!("{}.{}", output_name, t.output_format.extension()));
         let app_path = self.resolve_path(&t.app_file);
-        let extension = t.app_file.extension()
-            .and_then(|s| s.to_str())
-            .ok_or(RecipeError::NoExtension)?;
-        // let base_addr = self.config.bootloaders.get(&t.header) if extension == "bin"
-
+        
         let app_reader = self.create_reader(&app_path, None)?;
         let writer = self.create_writer(&output_path, t.output_format, t.fill_byte)?;
         
-        Ok(PackRecipe::new(
-            name.to_string(),
-            t.description.clone(),
+        // 查找 header 定义（先内置，后用户定义）
+        let header_name = &t.header;
+        let dsl = if let Some(builtin_dsl) = BuiltinHeaders::get_dsl(header_name) {
+            // 使用内置 DSL
+            builtin_dsl.to_string()
+        } else if let Some(header_def) = self.config.headers.get(header_name) {
+            // 使用用户定义的 DSL
+            header_def.def.clone()
+        } else {
+            // 既不是内置也不在配置中
+            return Err(RecipeError::HeaderNotFound(header_name.clone()));
+        };
+        
+        // 创建并验证 header builder（在构造阶段验证 DSL）
+        let header_builder = HeaderBuilder::new_validated(
+            header_name.clone(),
+            dsl
+        )?;
+        
+        Ok(PackRecipe {
+            name: name.to_string(),
+            description: t.description.clone(),
             app_reader,
             writer,
             output_path,
-            t.header.clone(),
-        ))
+            header_builder,
+        })
     }
     
     fn build_group(&self, name: &str, targets: &[String]) -> Result<Box<dyn Recipe>, RecipeError> {
