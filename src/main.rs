@@ -1,6 +1,5 @@
 use std::path::Path;
 use anyhow::{Context, Result};
-use log::{info};
 use baker_rs::cli::{self, Command};
 use baker_rs::config::{self, Config};
 use baker_rs::recipe::RecipeBuilder;
@@ -21,11 +20,9 @@ fn main() -> Result<()> {
             let builder = RecipeBuilder::new(&cfg, base_dir);
 
             let resolved = cfg.resolve_targets(&targets)?;
-            info!("Building targets: {:?}", resolved);
+            println!("Building targets: {:?}", resolved);
 
-            // Batch build all recipes
             let recipes = builder.build_batch(&resolved)?;
-            
             for recipe in recipes {
                 recipe.validate()?;
                 recipe.cook()?;

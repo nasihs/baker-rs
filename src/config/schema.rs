@@ -52,7 +52,9 @@ fn default_output_dir() -> PathBuf {
 #[derive(Debug, Deserialize, Clone)]
 pub struct HeaderDef {
     pub def: String,
+    pub suffix: String,
 }
+
 
 #[derive(Debug, Deserialize)]
 pub struct Bootloader {
@@ -124,11 +126,10 @@ pub struct PackTarget {
     pub description: Option<String>,
     pub header: String,  // use builtin header type or custom which defined in baker.toml -> headers
     pub app_file: PathBuf,
+    pub app_offset: Option<u32>,
     #[serde(default = "default_fill_byte")]
     pub fill_byte: u8,
     
-    #[serde(default)]
-    pub output_format: OutputFormat,  // bin for default
     pub output_name: Option<String>,  // if not defined, use target name as default
     pub output_dir: Option<PathBuf>,
 }
