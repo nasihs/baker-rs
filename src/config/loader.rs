@@ -70,6 +70,7 @@ impl Config {
         todo!()
     }
 
+    // fn validate_header(&self, header: &Hea)
     #[allow(unused_variables)]
     fn validate_target(&self, target: &Target) -> Result<(), ConfigError> {
         todo!()
@@ -116,13 +117,13 @@ impl Config {
                         result.push(target_name);
                     }
                 } else {
-                    return Err(ConfigError::TargetNotFound(target_name.to_owned()));
+                    return Err(ConfigError::TargetUndefined(target_name.to_owned()));
                 }
             }
             return Ok(());
         }
 
-        Err(ConfigError::TargetNotFound(name.to_string()))
+        Err(ConfigError::TargetUndefined(name.to_string()))
     }
 
 }

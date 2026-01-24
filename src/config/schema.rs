@@ -58,7 +58,7 @@ pub struct HeaderDef {
 
 #[derive(Debug, Deserialize)]
 pub struct Bootloader {
-    pub file: Option<PathBuf>,   // check when recipe runs
+    pub file: PathBuf,   // bootloader must be specified
     // TODO: u32->Addr
     pub base_addr: u32,  // used to check whether bootloader's base addr is correct when file isn't a bin
     pub app_offset: u32,

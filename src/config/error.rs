@@ -12,8 +12,8 @@ pub enum ConfigError {
     #[error("failed to parse config file")]
     Parse(#[from] toml::de::Error),
 
-    #[error("target not found: {0}")]
-    TargetNotFound(String),
+    #[error("undefined target or group: {0}")]
+    TargetUndefined(String),
 
     #[error("group not found: {0}")]
     GroupNotFound(String),

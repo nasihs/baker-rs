@@ -3,23 +3,20 @@ use thiserror::Error;
 
 #[derive(Error, Debug)]
 pub enum RecipeError {
-    #[error("target not found: {0}")]
-    TargetNotFound(String),
+    #[error("file not found at path: '{}'", .0.display())]
+    NotFound(PathBuf),
 
-    #[error("bootloader '{0}' has no file specified")]
-    BootloaderFileNotSpecified(String),
+    #[error("bootloader '{0}' is missing in config")]
+    MissingBootloader(String),
 
-    #[error("bootloader '{0}' not found")]
-    BootloaderNotFound(String),
+    #[error("missing header '{0}' (not built-in or defined in [headers])")]
+    MissingHeader(String),
 
-    #[error("input file not found: {}", .0.display())]
-    InputNotFound(PathBuf),
+    #[error("missing base addr for binary file '{0}'")]
+    MissingBaseAddr(String),
 
     #[error("config error: {0}")]
     Config(#[from] crate::config::ConfigError),
-
-    #[error("no extension")]
-    NoExtension,
 
     #[error("unsupported format: {0}")]
     UnsupportedFormat(String),
@@ -38,9 +35,6 @@ pub enum RecipeError {
         header_name: String, 
         reason: String 
     },
-
-    #[error("header '{0}' not found (not built-in or defined in [headers])")]
-    HeaderNotFound(String),
 
     #[error("header '{name}' already exists as built-in header, please use a different name")]
     HeaderExists { 

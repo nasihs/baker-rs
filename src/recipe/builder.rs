@@ -1,7 +1,8 @@
 use std::path::{Path, PathBuf};
+use log::trace;
 use crate::config::{Bootloader, Config, ConvertTarget, MergeTarget, PackTarget, OutputFormat, Target};
 use crate::firmware::{self, ImageReader, ImageWriter};
-use super::{Recipe, RecipeError, MergeRecipe, PackRecipe, ConvertRecipe, GroupRecipe, BuiltinHeaders};
+use super::{Recipe, RecipeError, MergeRecipe, PackRecipe, ConvertRecipe, BuiltinHeaders};
 use super::pack::HeaderBuilder;
 
 pub struct RecipeBuilder<'a> {
@@ -17,18 +18,10 @@ impl<'a> RecipeBuilder<'a> {
         }
     }
     
-    /// Creates a Recipe by name (can be a target or group)
-    pub fn build(&self, name: &str) -> Result<Box<dyn Recipe>, RecipeError> {
-        // 验证 headers 不与内置冲突
-        self.validate_headers()?;
-        
-        if let Some(group) = self.config.groups.get(name) {
-            return self.build_group(name, group.targets());
-        }
-        if let Some(target) = self.config.targets.get(name) {
-            return self.build_target(name, target);
-        }
-        Err(RecipeError::TargetNotFound(name.to_string()))
+    /// Creates a Recipe by target name
+    pub fn build(&self, name: &str) -> Result<Box<dyn Recipe>, RecipeError> {  // TODO name type -> Target/Group        
+        let target = self.config.targets.get(name).unwrap();  // target existance has been checked in config.resolve_targets
+        return self.build_target(name, target);
     }
     
     fn validate_headers(&self) -> Result<(), RecipeError> {
@@ -42,13 +35,16 @@ impl<'a> RecipeBuilder<'a> {
         Ok(())
     }
     
-    /// Creates multiple recipes by names (can be targets or groups)
+    /// Creates multiple recipes by target names
     pub fn build_batch(&self, names: &[&str]) -> Result<Vec<Box<dyn Recipe>>, RecipeError> {
+        self.validate_headers()?;
+
         names.iter()
             .map(|name| self.build(name))
             .collect()
     }
     
+    // Check referenced bootoladers/headers, and path existance
     fn build_target(&self, name: &str, target: &Target) -> Result<Box<dyn Recipe>, RecipeError> {
         match target {
             Target::Merge(t) => Ok(Box::new(self.build_merge(name, t)?)),
@@ -58,11 +54,9 @@ impl<'a> RecipeBuilder<'a> {
     }
     
     fn build_merge(&self, name: &str, t: &MergeTarget) -> Result<MergeRecipe, RecipeError> {
+        trace!("Check whether bootloader is defined");
         let bl: &Bootloader = self.config.bootloaders.get(&t.bootloader)
-            .ok_or_else(|| RecipeError::BootloaderNotFound(t.bootloader.clone()))?;
-        
-        let bl_file = bl.file.as_ref()
-            .ok_or_else(|| RecipeError::BootloaderFileNotSpecified(t.bootloader.clone()))?;
+            .ok_or_else(|| RecipeError::MissingBootloader(t.bootloader.clone()))?;
         
         let output_dir = self.resolve_path(
             t.output_dir.as_deref().unwrap_or(&self.config.env.output.dir)
@@ -70,7 +64,7 @@ impl<'a> RecipeBuilder<'a> {
         let output_name = t.output_name.as_deref().unwrap_or(name);
         let output_path = output_dir.join(format!("{}.{}", output_name, t.output_format.extension()));
         
-        let bootloader_path = self.resolve_path(&bl_file);
+        let bootloader_path = self.resolve_path(&bl.file);
         let app_path = self.resolve_path(&t.app_file);
         
         // Create readers
@@ -80,6 +74,7 @@ impl<'a> RecipeBuilder<'a> {
         // Create writer
         let writer = self.create_writer(&output_path, t.output_format, t.fill_byte)?;
         
+        trace!("Built merge recipe: {}", name);
         Ok(MergeRecipe {
             name: name.to_string(),
             description: t.description.clone(),
@@ -101,6 +96,7 @@ impl<'a> RecipeBuilder<'a> {
         let reader = self.create_reader(&input_path, None)?;
         let writer = self.create_writer(&output_path, t.output_format, t.fill_byte)?;
         
+        trace!("Built convert recipe: {}", name);
         Ok(ConvertRecipe {
             name: name.to_string(),
             description: t.description.clone(),
@@ -113,6 +109,7 @@ impl<'a> RecipeBuilder<'a> {
     fn build_pack(&self, name: &str, t: &PackTarget) -> Result<PackRecipe, RecipeError> {
         let header_name = &t.header;
         
+        trace!("Check whether header is defined");
         let (dsl, suffix) = if let Some(builtin_dsl) = BuiltinHeaders::get_dsl(header_name) {
             let suffix = BuiltinHeaders::get_suffix(header_name)
                 .expect("builtin header must have suffix");
@@ -120,7 +117,7 @@ impl<'a> RecipeBuilder<'a> {
         } else if let Some(header_def) = self.config.headers.get(header_name) {
             (header_def.def.clone(), header_def.suffix.clone())
         } else {
-            return Err(RecipeError::HeaderNotFound(header_name.clone()));
+            return Err(RecipeError::MissingHeader(header_name.clone()));
         };
         
         let output_dir = self.resolve_path(
@@ -133,11 +130,13 @@ impl<'a> RecipeBuilder<'a> {
         let app_reader = self.create_reader(&app_path, t.app_offset)?;
         let writer = self.create_writer(&output_path, OutputFormat::Bin, t.fill_byte)?;
         
+        trace!("Build header builder: {}", header_name);
         let header_builder = HeaderBuilder::new_validated(
             header_name.clone(),
             dsl
         )?;
         
+        trace!("Built pack recipe: {}", name);
         Ok(PackRecipe {
             name: name.to_string(),
             description: t.description.clone(),
@@ -146,15 +145,6 @@ impl<'a> RecipeBuilder<'a> {
             output_path,
             header_builder,
         })
-    }
-    
-    fn build_group(&self, name: &str, targets: &[String]) -> Result<Box<dyn Recipe>, RecipeError> {
-        let recipes: Result<Vec<_>, _> = targets
-            .iter()
-            .map(|t| self.build(t))
-            .collect();
-        
-        Ok(Box::new(GroupRecipe::new(name.to_string(), recipes?)))
     }
     
     fn resolve_path<P: AsRef<Path>>(&self, path: P) -> PathBuf {
@@ -169,7 +159,7 @@ impl<'a> RecipeBuilder<'a> {
     /// Create an ImageReader based on file extension
     fn create_reader(&self, path: &Path, base_addr: Option<u32>) -> Result<Box<dyn ImageReader>, RecipeError> {
         if !path.exists() {
-            return Err(RecipeError::InputNotFound(path.to_path_buf()));
+            return Err(RecipeError::NotFound(path.to_path_buf()));
         }
         
         let extension = path.extension()
@@ -179,10 +169,7 @@ impl<'a> RecipeBuilder<'a> {
         match extension.to_lowercase().as_str() {
             "hex" => Ok(Box::new(firmware::hex::HexReader::new(path))),
             "bin" => {
-                let addr = base_addr.ok_or_else(|| RecipeError::BuildFailed {
-                    name: path.display().to_string(),
-                    reason: "Binary file requires base address".to_string(),
-                })?;
+                let addr = base_addr.ok_or_else(|| RecipeError::MissingBaseAddr(path.display().to_string()))?;
                 Ok(Box::new(firmware::bin::BinReader::new(path, addr)))
             }
             "srec" | "s19" | "s28" | "s37" => {
