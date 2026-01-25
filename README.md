@@ -7,9 +7,11 @@ A command-line tool for automating embedded firmware post-build packaging, writt
 ## Features
 
 - **Configuration-driven**: Define all build variants in a single TOML file
-- **Version extraction**: Auto-extract version from C headers, CMake, Git tags
+- **Version extraction**: Auto-extract version from C headers with flexible field mapping
+- **Template variables**: Dynamic output naming with version, date/time, and project variables
 - **Firmware merging**: Combine bootloader and application with offset control
-- **OTA packaging**: Generate update packages with custom headers
+- **Format conversion**: Convert between HEX, BIN, and SREC formats
+- **OTA packaging**: Generate update packages with custom binary headers (DSL-based)
 - **CI/CD friendly**: Single binary, no runtime dependencies
 
 ## Quick Start
@@ -22,6 +24,12 @@ A command-line tool for automating embedded firmware post-build packaging, writt
 
     [env.output]
     dir = "release"
+
+    [env.version]
+    source = "header"
+    file = "version.h"
+    string = "VERSION_STR"       # Full version string (e.g., "v1.2.3-beta")
+    build = "BUILD_NUMBER"       # Optional build number
 
     [bootloaders.default]
     file = "build/bt.hex"
@@ -51,6 +59,7 @@ A command-line tool for automating embedded firmware post-build packaging, writt
     }
     """
 
+    output_name = "{PROJECT}_v{VERSION}_build{BUILD}_{DATE}"  # Template variables
     [targets.merge_test]
     type = "merge"
     description = "Merge bootloader and app"
@@ -89,7 +98,38 @@ A command-line tool for automating embedded firmware post-build packaging, writt
    baker build factory      # Build specific targets
    baker list               # List all targets
    ```
+## Version Extraction & Template Variables
 
+Baker supports automatic version extraction from C/C++ header files and provides template variables for dynamic output naming.
+
+### Quick Example
+
+```c
+// version.h
+#define VERSION_STR "v1.2.3-beta.2+20260125"
+#define BUILD_NUMBER 100
+```
+
+```toml
+# baker.toml
+[env.version]
+source = "header"
+file = "version.h"
+string = "VERSION_STR"
+build = "BUILD_NUMBER"
+
+[targets.release]
+output_name = "{PROJECT}_v{VERSION}_build{BUILD}_{DATE}"
+# Output: myapp_v1.2.3_build100_20260125.hex
+```
+
+### Available Template Variables
+
+- **Version**: `{MAJOR}`, `{MINOR}`, `{PATCH}`, `{VERSION}`, `{VERSION_FULL}`, `{BUILD}`
+- **DateTime**: `{DATE}`, `{TIME}`, `{DATETIME}`, `{TIMESTAMP}`
+- **Project**: `{PROJECT}`, `{TARGET}`
+
+For detailed documentation on version extraction and template variables, see [docs/version-templating.md](docs/version-templating.md).
 
 
 ## Lisence
