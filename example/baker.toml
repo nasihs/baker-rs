@@ -5,6 +5,14 @@ default = "merge_test"
 [env.output]
 dir = "release"
 
+[env.version]
+source = "header"
+file = "version.h"
+# Either 'string' OR (major+minor+patch) is required
+# 'string' supports v prefix (e.g., "v1.2.3")
+build = "BUILD_NUMBER"
+string = "VERSION_STR"
+
 [bootloaders.default]
 file = "build/bt.hex"
 base_addr = 0x0800_0000
@@ -39,6 +47,7 @@ description = "Merge bootloader and app"
 bootloader = "default"
 app_file = "build/app.hex"
 output_format = "hex"  # use bin if not specified
+output_name = "{PROJECT}_v{VERSION}_build.{BUILD}_{DATE}"
 
 [targets.pack_from_bin]
 type = "pack"

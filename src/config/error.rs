@@ -6,10 +6,10 @@ pub enum ConfigError {
     #[error("config file not found: {}", path.display())]
     NotFound { path: PathBuf },
 
-    #[error("failed to read config file: {0}")]
+    #[error(transparent)]
     Read(#[from] std::io::Error),
 
-    #[error("failed to parse config file")]
+    #[error(transparent)]
     Parse(#[from] toml::de::Error),
 
     #[error("undefined target or group: {0}")]

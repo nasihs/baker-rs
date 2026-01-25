@@ -1,21 +1,40 @@
 use std::path::{Path, PathBuf};
-use log::trace;
-use crate::config::{Bootloader, Config, ConvertTarget, MergeTarget, PackTarget, OutputFormat, Target};
+use std::collections::HashMap;
+use log::{trace};
+use crate::config::{Bootloader, Config, ConvertTarget, MergeTarget, PackTarget, OutputFormat, Target, VersionSource};
 use crate::firmware::{self, ImageReader, ImageWriter};
+use crate::version::{VersionInfo, VersionExtractor, HeaderExtractor, VersionError};
 use super::{Recipe, RecipeError, MergeRecipe, PackRecipe, ConvertRecipe, BuiltinHeaders};
 use super::pack::HeaderBuilder;
 
 pub struct RecipeBuilder<'a> {
     config: &'a Config,
     base_dir: PathBuf,
+    variables: HashMap<String, String>,  // Template variables
 }
 
 impl<'a> RecipeBuilder<'a> {
-    pub fn new(config: &'a Config, base_dir: &Path) -> Self {
-        Self {
+    pub fn new(config: &'a Config, base_dir: &Path) -> Result<Self, RecipeError> {
+        // Extract version information and build template variables
+        let mut variables = HashMap::new();
+        
+        // Add project name
+        variables.insert("PROJECT".to_string(), config.project.name.clone());
+        
+        // Add date/time variables
+        Self::register_datetime_variables(&mut variables);
+        
+        // Extract and register version variables
+        if let Some(ref version_config) = config.env.version {
+            let version_info = Self::extract_version(version_config, base_dir)?;
+            Self::register_version_variables(&mut variables, &version_info);
+        }
+        
+        Ok(Self {
             config,
             base_dir: base_dir.to_path_buf(),
-        }
+            variables,
+        })
     }
     
     /// Creates a Recipe by target name
@@ -62,7 +81,8 @@ impl<'a> RecipeBuilder<'a> {
             t.output_dir.as_deref().unwrap_or(&self.config.env.output.dir)
         );
         let output_name = t.output_name.as_deref().unwrap_or(name);
-        let output_path = output_dir.join(format!("{}.{}", output_name, t.output_format.extension()));
+        let rendered_name = self.render_template(output_name, name)?;
+        let output_path = output_dir.join(format!("{}.{}", rendered_name, t.output_format.extension()));
         
         let bootloader_path = self.resolve_path(&bl.file);
         let app_path = self.resolve_path(&t.app_file);
@@ -90,7 +110,8 @@ impl<'a> RecipeBuilder<'a> {
             t.output_dir.as_deref().unwrap_or(&self.config.env.output.dir)
         );
         let output_name = t.output_name.as_deref().unwrap_or(name);
-        let output_path = output_dir.join(format!("{}.{}", output_name, t.output_format.extension()));
+        let rendered_name = self.render_template(output_name, name)?;
+        let output_path = output_dir.join(format!("{}.{}", rendered_name, t.output_format.extension()));
         
         let input_path = self.resolve_path(&t.input_file);
         let reader = self.create_reader(&input_path, None)?;
@@ -124,7 +145,8 @@ impl<'a> RecipeBuilder<'a> {
             t.output_dir.as_deref().unwrap_or(&self.config.env.output.dir)
         );
         let output_name = t.output_name.as_deref().unwrap_or(name);
-        let output_path = output_dir.join(format!("{}.{}", output_name, suffix));
+        let rendered_name = self.render_template(output_name, name)?;
+        let output_path = output_dir.join(format!("{}.{}", rendered_name, suffix));
         let app_path = self.resolve_path(&t.app_file);
         
         let app_reader = self.create_reader(&app_path, t.app_offset)?;
@@ -188,5 +210,111 @@ impl<'a> RecipeBuilder<'a> {
             OutputFormat::Bin => Ok(Box::new(firmware::bin::BinWriter::new(path, fill_byte))),
             OutputFormat::Srec => Ok(Box::new(firmware::srec::SrecWriter::new(path))),
         }
+    }
+    
+    /// Extract version information from configured source
+    fn extract_version(
+        version_config: &crate::config::VersionConfig,
+        base_dir: &Path,
+    ) -> Result<VersionInfo, RecipeError> {
+        match version_config.source {
+            VersionSource::Header => {
+                let file_path = version_config.file.as_ref()
+                    .ok_or_else(|| RecipeError::VersionError(
+                        VersionError::MissingConfig("file".to_string())
+                    ))?;
+                
+                let full_path = if file_path.is_absolute() {
+                    file_path.clone()
+                } else {
+                    base_dir.join(file_path)
+                };
+                
+                // Validate configuration: either string or (major+minor+patch) required
+                if version_config.string.is_none() 
+                    && (version_config.major.is_none() 
+                        || version_config.minor.is_none() 
+                        || version_config.patch.is_none()) {
+                    return Err(RecipeError::VersionError(
+                        VersionError::MissingConfig(
+                            "'string' or 'major'/'minor'/'patch'".to_string()
+                        )
+                    ));
+                }
+                
+                let extractor = HeaderExtractor::new(
+                    full_path,
+                    version_config.major.clone(),
+                    version_config.minor.clone(),
+                    version_config.patch.clone(),
+                )
+                .with_build(version_config.build.clone())
+                .with_pre_release(version_config.pre_release.clone())
+                .with_string(version_config.string.clone());
+                
+                Ok(extractor.extract()?)
+            }
+            _ => {
+                Err(RecipeError::VersionError(
+                    VersionError::UnsupportedSource(format!("{:?}", version_config.source))
+                ))
+            }
+        }
+    }
+    
+    /// Register version-related template variables
+    fn register_version_variables(vars: &mut HashMap<String, String>, version: &VersionInfo) {
+        vars.insert("MAJOR".to_string(), version.major.to_string());
+        vars.insert("MINOR".to_string(), version.minor.to_string());
+        vars.insert("PATCH".to_string(), version.patch.to_string());
+        vars.insert("VERSION".to_string(), version.version_string());
+        vars.insert("VERSION_FULL".to_string(), version.full_string());
+        
+        if let Some(build) = version.build {
+            vars.insert("BUILD".to_string(), build.to_string());
+        }
+        
+        if let Some(ref pre) = version.pre_release {
+            vars.insert("PRE_RELEASE".to_string(), pre.clone());
+        }
+        
+        if let Some(ref meta) = version.build_metadata {
+            vars.insert("BUILD_METADATA".to_string(), meta.clone());
+        }
+    }
+    
+    /// Register date/time template variables
+    fn register_datetime_variables(vars: &mut HashMap<String, String>) {
+        use chrono::Local;
+        let now = Local::now();
+        
+        vars.insert("DATE".to_string(), now.format("%Y%m%d").to_string());
+        vars.insert("TIME".to_string(), now.format("%H%M%S").to_string());
+        vars.insert("DATETIME".to_string(), now.format("%Y%m%d_%H%M%S").to_string());
+        vars.insert("TIMESTAMP".to_string(), now.timestamp().to_string());
+    }
+    
+    /// Render template string with variables
+    fn render_template(&self, template: &str, target_name: &str) -> Result<String, RecipeError> {
+        let mut result = template.to_string();
+        
+        // Add target name to temporary variables
+        let mut vars = self.variables.clone();
+        vars.insert("TARGET".to_string(), target_name.to_string());
+        
+        // Replace all {VAR} placeholders
+        for (key, value) in &vars {
+            let placeholder = format!("{{{}}}", key);
+            result = result.replace(&placeholder, value);
+        }
+        
+        // Check for undefined variables (remaining placeholders)
+        let re = regex::Regex::new(r"\{([A-Z_][A-Z0-9_]*)\}").unwrap();
+        if let Some(cap) = re.captures(&result) {
+            let var_name = cap[1].to_string();
+            return Err(RecipeError::MissingVariable(var_name));
+        }
+        
+        Ok(result)
     }
 }

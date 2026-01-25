@@ -3,3 +3,4 @@ pub mod config;
 pub mod error;
 pub mod firmware;
 pub mod recipe;
+pub mod version;

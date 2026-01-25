@@ -6,7 +6,7 @@ use super::schema::{Config, Group, Target, Bootloader};
 #[allow(dead_code)]
 fn validate(config: &Config) -> Result<(), ConfigError> {  // TODO move to impl 
     // 验证 targets 中引用的 bootloader 存在
-    for (name, target) in &config.targets {
+    for (_name, target) in &config.targets {
         if let Target::Merge(merge) = target {
             // 检查是否是 bootloader 引用（非路径）
             if !merge.bootloader.contains('/') && !merge.bootloader.contains('\\') {
@@ -65,18 +65,18 @@ impl Config {
     }
 
 
-    #[allow(unused_variables)]
+    #[allow(unused_variables, dead_code)]
     fn validate_bootloader(&self, bl: &Bootloader) -> Result<(), ConfigError> {
         todo!()
     }
 
     // fn validate_header(&self, header: &Hea)
-    #[allow(unused_variables)]
+    #[allow(unused_variables, dead_code)]
     fn validate_target(&self, target: &Target) -> Result<(), ConfigError> {
         todo!()
     }
 
-    #[allow(unused_variables)]
+    #[allow(unused_variables, dead_code)]
     fn validate_group(&self, group: &Group) -> Result<(), ConfigError> {
         todo!()
     }

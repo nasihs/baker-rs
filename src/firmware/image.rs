@@ -56,14 +56,14 @@ impl Image {
     }
 
     pub fn merge(&mut self, other: &Image) -> Result<(), FirmwareError> {
-        let Some((other_start, other_end)) = other.address_range() else {
+        let Some((_other_start, _other_end)) = other.address_range() else {
             return Ok(());
         };
 
         // let other_start = other_start + 0;
         // let other_end = other_end + 0;
 
-        if let Some((start, end)) = self.address_range() {
+        if let Some((_start, _end)) = self.address_range() {
             // if other_start <= end && start <= other_end {
             //     return Err(FirmwareError::AddressOverlap(start));
             // }

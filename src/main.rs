@@ -1,5 +1,5 @@
 use std::path::Path;
-use anyhow::{Context, Result};
+use anyhow::{Result};
 use baker_rs::cli::{self, Command};
 use baker_rs::config::{self, Config};
 use baker_rs::recipe::RecipeBuilder;
@@ -15,9 +15,9 @@ fn main() -> Result<()> {
 
     match cli.command {
         Some(Command::Build { targets }) => {
-            let cfg = Config::from_file(&cli.config).context("failed to load config file")?;
+            let cfg = Config::from_file(&cli.config)?;
             let base_dir = cli.config.parent().unwrap_or(Path::new("."));
-            let builder = RecipeBuilder::new(&cfg, base_dir);
+            let builder = RecipeBuilder::new(&cfg, base_dir)?;
 
             let resolved = cfg.resolve_targets(&targets)?;
             println!("Building targets: {:?}", resolved);
@@ -29,7 +29,7 @@ fn main() -> Result<()> {
             }
         }
         Some(Command::List) => {
-            let cfg = Config::from_file(&cli.config).context("failed to load config file")?;
+            let cfg = Config::from_file(&cli.config)?;
 
             println!("Project: {}\n", cfg.project.name);
             println!("Targets:");

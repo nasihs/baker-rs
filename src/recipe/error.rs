@@ -15,17 +15,23 @@ pub enum RecipeError {
     #[error("missing base addr for binary file '{0}'")]
     MissingBaseAddr(String),
 
-    #[error("config error: {0}")]
+    #[error(transparent)]
     Config(#[from] crate::config::ConfigError),
 
     #[error("unsupported format: {0}")]
     UnsupportedFormat(String),
 
-    #[error("firmware error: {0}")]
+    #[error(transparent)]
     Firmware(#[from] crate::firmware::FirmwareError),
 
-    #[error("IO error: {0}")]
+    #[error(transparent)]
     Io(#[from] std::io::Error),
+
+    #[error(transparent)]
+    VersionError(#[from] crate::version::VersionError),
+
+    #[error("missing template variable '{0}' in [env.version]")]
+    MissingVariable(String),
 
     #[error("build failed for '{name}': {reason}")]
     BuildFailed { name: String, reason: String },

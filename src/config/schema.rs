@@ -29,6 +29,7 @@ pub struct Project {
 pub struct Env {
     #[serde(default)]
     pub output: OutputConfig,
+    pub version: Option<VersionConfig>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -47,6 +48,30 @@ impl Default for OutputConfig {
 
 fn default_output_dir() -> PathBuf {
     PathBuf::from("output")
+}
+
+#[derive(Debug, Deserialize, Clone)]
+pub struct VersionConfig {
+    pub source: VersionSource,
+    pub file: Option<PathBuf>,       // Required for header/cmake/toml sources
+    
+    // Field mappings (macro names, variable names, or field names)
+    // All optional for maximum flexibility - at least `string` or (major+minor+patch) required
+    pub major: Option<String>,
+    pub minor: Option<String>,
+    pub patch: Option<String>,
+    pub build: Option<String>,
+    pub pre_release: Option<String>,
+    pub string: Option<String>,      // Full version string macro/variable
+}
+
+#[derive(Debug, Deserialize, Clone, Copy)]
+#[serde(rename_all = "lowercase")]
+pub enum VersionSource {
+    Header,   // C/C++ header file
+    Cmake,    // CMakeLists.txt or CMakeCache.txt (not yet implemented)
+    Toml,     // TOML config file (not yet implemented)
+    Env,      // Environment variables (not yet implemented)
 }
 
 #[derive(Debug, Deserialize, Clone)]
