@@ -10,30 +10,30 @@ use super::pack::HeaderBuilder;
 pub struct RecipeBuilder<'a> {
     config: &'a Config,
     base_dir: PathBuf,
-    variables: HashMap<String, String>,  // Template variables
+    env: HashMap<String, delbin::Value>,  // Environment variables (unified type)
 }
 
 impl<'a> RecipeBuilder<'a> {
     pub fn new(config: &'a Config, base_dir: &Path) -> Result<Self, RecipeError> {
-        // Extract version information and build template variables
-        let mut variables = HashMap::new();
+        // Extract version information and build environment variables
+        let mut env = HashMap::new();
         
         // Add project name
-        variables.insert("PROJECT".to_string(), config.project.name.clone());
+        env.insert("PROJECT".to_string(), delbin::Value::String(config.project.name.clone()));
         
         // Add date/time variables
-        Self::register_datetime_variables(&mut variables);
+        Self::register_datetime_variables(&mut env);
         
         // Extract and register version variables
         if let Some(ref version_config) = config.env.version {
             let version_info = Self::extract_version(version_config, base_dir)?;
-            Self::register_version_variables(&mut variables, &version_info);
+            Self::register_version_variables(&mut env, &version_info);
         }
         
         Ok(Self {
             config,
             base_dir: base_dir.to_path_buf(),
-            variables,
+            env,
         })
     }
     
@@ -155,7 +155,8 @@ impl<'a> RecipeBuilder<'a> {
         trace!("Build header builder: {}", header_name);
         let header_builder = HeaderBuilder::new_validated(
             header_name.clone(),
-            dsl
+            dsl,
+            self.env.clone()  // Pass environment variables to header builder
         )?;
         
         trace!("Built pack recipe: {}", name);
@@ -262,36 +263,37 @@ impl<'a> RecipeBuilder<'a> {
         }
     }
     
-    /// Register version-related template variables
-    fn register_version_variables(vars: &mut HashMap<String, String>, version: &VersionInfo) {
-        vars.insert("MAJOR".to_string(), version.major.to_string());
-        vars.insert("MINOR".to_string(), version.minor.to_string());
-        vars.insert("PATCH".to_string(), version.patch.to_string());
-        vars.insert("VERSION".to_string(), version.version_string());
-        vars.insert("VERSION_FULL".to_string(), version.full_string());
+    /// Register version-related environment variables
+    fn register_version_variables(vars: &mut HashMap<String, delbin::Value>, version: &VersionInfo) {
+        vars.insert("VERSION_MAJOR".to_string(), delbin::Value::U32(version.major));
+        vars.insert("VERSION_MINOR".to_string(), delbin::Value::U32(version.minor));
+        vars.insert("VERSION_PATCH".to_string(), delbin::Value::U32(version.patch));
+        vars.insert("VERSION".to_string(), delbin::Value::String(version.version_string()));
+        vars.insert("VERSION_FULL".to_string(), delbin::Value::String(version.full_string()));
         
         if let Some(build) = version.build {
-            vars.insert("BUILD".to_string(), build.to_string());
+            vars.insert("BUILD".to_string(), delbin::Value::U32(build));
         }
         
         if let Some(ref pre) = version.pre_release {
-            vars.insert("PRE_RELEASE".to_string(), pre.clone());
+            vars.insert("PRE_RELEASE".to_string(), delbin::Value::String(pre.clone()));
         }
         
         if let Some(ref meta) = version.build_metadata {
-            vars.insert("BUILD_METADATA".to_string(), meta.clone());
+            vars.insert("BUILD_METADATA".to_string(), delbin::Value::String(meta.clone()));
         }
     }
     
-    /// Register date/time template variables
-    fn register_datetime_variables(vars: &mut HashMap<String, String>) {
+    /// Register date/time environment variables
+    fn register_datetime_variables(vars: &mut HashMap<String, delbin::Value>) {
         use chrono::Local;
         let now = Local::now();
         
-        vars.insert("DATE".to_string(), now.format("%Y%m%d").to_string());
-        vars.insert("TIME".to_string(), now.format("%H%M%S").to_string());
-        vars.insert("DATETIME".to_string(), now.format("%Y%m%d_%H%M%S").to_string());
-        vars.insert("TIMESTAMP".to_string(), now.timestamp().to_string());
+        vars.insert("DATE".to_string(), delbin::Value::String(now.format("%Y%m%d").to_string()));
+        vars.insert("TIME".to_string(), delbin::Value::String(now.format("%H%M%S").to_string()));
+        vars.insert("DATETIME".to_string(), delbin::Value::String(now.format("%Y%m%d_%H%M%S").to_string()));
+        vars.insert("TIMESTAMP".to_string(), delbin::Value::U32(now.timestamp() as u32));
+        vars.insert("UNIX_TIMESTAMP".to_string(), delbin::Value::U32(now.timestamp() as u32));
     }
     
     /// Render template string with variables
@@ -299,13 +301,14 @@ impl<'a> RecipeBuilder<'a> {
         let mut result = template.to_string();
         
         // Add target name to temporary variables
-        let mut vars = self.variables.clone();
-        vars.insert("TARGET".to_string(), target_name.to_string());
+        let mut vars = self.env.clone();
+        vars.insert("TARGET".to_string(), delbin::Value::String(target_name.to_string()));
         
         // Replace all {VAR} placeholders
         for (key, value) in &vars {
             let placeholder = format!("{{{}}}", key);
-            result = result.replace(&placeholder, value);
+            let value_str = Self::value_to_string(value);
+            result = result.replace(&placeholder, &value_str);
         }
         
         // Check for undefined variables (remaining placeholders)
@@ -316,5 +319,27 @@ impl<'a> RecipeBuilder<'a> {
         }
         
         Ok(result)
+    }
+    
+    /// Convert delbin::Value to string for template rendering
+    fn value_to_string(value: &delbin::Value) -> String {
+        match value {
+            delbin::Value::U8(v) => v.to_string(),
+            delbin::Value::U16(v) => v.to_string(),
+            delbin::Value::U32(v) => v.to_string(),
+            delbin::Value::U64(v) => v.to_string(),
+            delbin::Value::I8(v) => v.to_string(),
+            delbin::Value::I16(v) => v.to_string(),
+            delbin::Value::I32(v) => v.to_string(),
+            delbin::Value::I64(v) => v.to_string(),
+            delbin::Value::String(s) => s.clone(),
+            delbin::Value::Bytes(b) => {
+                // Convert bytes to hex string
+                b.iter()
+                    .map(|byte| format!("{:02X}", byte))
+                    .collect::<Vec<_>>()
+                    .join("")
+            },
+        }
     }
 }

@@ -52,12 +52,12 @@ pub struct PackRecipe {
 pub(super) struct HeaderBuilder {
     header_name: String,
     dsl: String,
+    env: HashMap<String, delbin::Value>,  // Environment variables for header generation
 }
 
 impl HeaderBuilder {
-    pub fn new_validated(header_name: String, dsl: String) -> Result<Self, RecipeError> {
+    pub fn new_validated(header_name: String, dsl: String, env: HashMap<String, delbin::Value>) -> Result<Self, RecipeError> {
         // validate grammar with blank image
-        let env: HashMap<String, delbin::Value> = HashMap::new();
         let mut sections: HashMap<String, Vec<u8>> = HashMap::new();
         sections.insert("image".to_string(), Vec::new());
         
@@ -66,6 +66,7 @@ impl HeaderBuilder {
                 Ok(Self { 
                     header_name,
                     dsl,
+                    env,
                 })
             }
             Err(e) => {
@@ -79,11 +80,10 @@ impl HeaderBuilder {
     
     /// Generate binary header
     pub fn generate(&self, app_data: &[u8]) -> Result<Vec<u8>, RecipeError> {
-        let env: HashMap<String, delbin::Value> = HashMap::new();
         let mut sections: HashMap<String, Vec<u8>> = HashMap::new();
         sections.insert("image".to_string(), app_data.to_vec());
         
-        delbin::generate(&self.dsl, &env, &sections)
+        delbin::generate(&self.dsl, &self.env, &sections)
             .map(|r| r.data)
             .map_err(|e| RecipeError::BuildFailed {
                 name: self.header_name.clone(),

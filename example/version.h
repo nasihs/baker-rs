@@ -14,3 +14,4 @@
 #define VERSION_MINOR 2
 #define VERSION_PATCH 3
 #define BUILD_NUMBER 100
+#define VERSION_STR "v2.3.4"
