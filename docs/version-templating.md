@@ -1,300 +1,264 @@
 # Version Extraction and Template Variables
 
-Baker provides a powerful version extraction system that can parse version information from various sources and use them in dynamic output file naming through template variables.
+Baker can extract version information from any text file using a line-pattern template, and makes those values available as `${VER.*}` variables throughout `baker.toml`.
 
 ## Table of Contents
 
-- [Version Extraction](#version-extraction)
-  - [Configuration](#configuration)
-  - [Header File Extraction](#header-file-extraction)
-  - [Flexible Field Mapping](#flexible-field-mapping)
-- [Template Variables](#template-variables)
-  - [Version Variables](#version-variables)
-  - [DateTime Variables](#datetime-variables)
-  - [Project Variables](#project-variables)
+- [How It Works](#how-it-works)
+- [Configuration](#configuration)
+- [Template Syntax](#template-syntax)
+- [Type Inference](#type-inference)
+- [Template Variables Reference](#template-variables-reference)
 - [Examples](#examples)
 - [Error Handling](#error-handling)
 
-## Version Extraction
+## How It Works
 
-### Configuration
+Each line in the `template` string that contains one or more `${VAR}` placeholders is compiled into a regex pattern. The surrounding text on that line is matched literally against every line of the target file. When a match is found, the captured value is stored as `VER.<VAR>` in baker's environment. Lines without placeholders are ignored.
 
-Version extraction is configured in the `[env.version]` section of your `baker.toml`:
+All `${VER.*}` variables can then be used in:
+- `output_name` fields of any target
+- The delbin binary header DSL (`def` field of `[headers.*]`)
 
-```toml
-[env.version]
-source = "header"           # Currently supported: "header"
-file = "version.h"          # Path to version file (relative to baker.toml)
-
-# Option 1: Extract from full version string
-string = "VERSION_STR"      # Macro containing version string
-
-# Option 2: Extract from individual fields
-major = "VERSION_MAJOR"
-minor = "VERSION_MINOR"
-patch = "VERSION_PATCH"
-
-# Optional fields (for both options)
-build = "BUILD_NUMBER"
-pre_release = "PRE_RELEASE"
-```
-
-**Note**: You must provide either `string` OR all of (`major`, `minor`, `patch`). The `build` and `pre_release` fields are always optional.
-
-### Header File Extraction
-
-Baker can extract version information from C/C++ header files using `#define` macros.
-
-#### Strategy 1: String-based Version
-
-Extract from a single version string macro:
-
-```c
-// version.h
-#define VERSION_STR "1.2.3-beta.2+20260125"
-#define BUILD_NUMBER 100
-```
+## Configuration
 
 ```toml
 [env.version]
-source = "header"
-file = "version.h"
-string = "VERSION_STR"      # Parses semantic version
-build = "BUILD_NUMBER"      # Supplements build info
+source = "file"       # Supported: "file"
+file = "version.h"    # Any text file, relative to baker.toml
+template = """
+#define VERSION_MAJOR  ${MAJOR}
+#define VERSION_MINOR  ${MINOR}
+#define VERSION_PATCH  ${PATCH}
+#define BUILD_NUMBER   ${BUILD}
+"""
 ```
 
-**Supported version string formats:**
-- Basic: `1.2.3`
-- With v prefix: `v1.2.3` or `V1.2.3`
-- With pre-release: `1.2.3-beta.2`, `1.2.3-rc.1`
-- With build metadata: `1.2.3+20260125`
-- Full semantic version: `1.2.3-beta.2+20260125`
+`source = "file"` works with any text-based format — C headers, `CMakeLists.txt`, Python source, INI files, etc.
 
-#### Strategy 2: Field-based Version
+## Template Syntax
 
-Extract from individual version field macros:
+### Variable Placeholder
+
+`${VAR}` captures the value at that position. The placeholder name must match `[A-Z_][A-Z0-9_]*`. The captured value is registered as `VER.<VAR>` in baker's environment.
+
+```toml
+# ${MAJOR} → captured as VER.MAJOR
+template = '#define VERSION_MAJOR  ${MAJOR}'
+```
+
+### Multiple Placeholders on One Line
+
+A single template line can contain several placeholders. Each captures a distinct value from the same line in the file:
+
+```toml
+template = '#define VERSION_STR  "v${MAJOR}.${MINOR}.${PATCH}"'
+# Matches: #define VERSION_STR  "v1.2.3"
+# → VER.MAJOR="1", VER.MINOR="2", VER.PATCH="3"
+```
+
+### Whitespace Flexibility
+
+Minor differences in spacing between the template line and the file line are tolerated — a single space in the template matches one or more whitespace characters in the file.
+
+### Comment Tolerance
+
+Trailing C-style line comments (`// ...`) are ignored when matching.
+
+### Multiline Template (recommended)
+
+```toml
+template = """
+#define VERSION_MAJOR  ${MAJOR}
+#define VERSION_MINOR  ${MINOR}
+#define VERSION_PATCH  ${PATCH}
+#define BUILD_NUMBER   ${BUILD}
+"""
+```
+
+All template lines that contain `${VAR}` must each match at least one line in the target file, or baker reports an error.
+
+## Type Inference
+
+Captured values are automatically typed:
+
+| Captured string | Stored type | Example |
+|---|---|---|
+| Decimal integer | `u32` | `3` → `3` |
+| Hex integer (`0x`/`0X`) | `u32` | `0x0A` → `10` |
+| Binary integer (`0b`/`0B`) | `u32` | `0b11` → `3` |
+| Anything else | `String` | `"beta"` → `"beta"` |
+
+Quoted strings (e.g. `"1.2.3"`) have their surrounding quotes stripped before type inference.
+
+## Template Variables Reference
+
+### Version Variables (`VER.*`)
+
+These are defined entirely by your `template`. The names shown below are conventional but you can use any uppercase identifier:
+
+| Template placeholder | Baker variable | Typical use |
+|---|---|---|
+| `${MAJOR}` | `${VER.MAJOR}` | Major version number |
+| `${MINOR}` | `${VER.MINOR}` | Minor version number |
+| `${PATCH}` | `${VER.PATCH}` | Patch version number |
+| `${BUILD}` | `${VER.BUILD}` | Build/revision number |
+| `${ANY_NAME}` | `${VER.ANY_NAME}` | Any custom field |
+
+### DateTime Variables
+
+Always available, generated at build time:
+
+| Variable | Description | Example | Format |
+|---|---|---|---|
+| `${DATE}` | Current date | `20260125` | `YYYYmmdd` |
+| `${TIME}` | Current time | `143052` | `HHMMSS` |
+| `${DATETIME}` | Date and time combined | `20260125_143052` | `YYYYmmdd_HHMMSS` |
+| `${TIMESTAMP}` | Unix timestamp | `1737804652` | Seconds since epoch |
+| `${UNIX_TIMESTAMP}` | Unix timestamp (alias) | `1737804652` | Seconds since epoch |
+
+### Project Variables
+
+Always available:
+
+| Variable | Description | Example |
+|---|---|---|
+| `${PROJECT}` | Project name | `myapp` |
+| `${TARGET}` | Name of the target being built | `release_build` |
+
+## Examples
+
+### Integer Macros (C header)
 
 ```c
 // version.h
 #define VERSION_MAJOR 1
 #define VERSION_MINOR 2
 #define VERSION_PATCH 3
+#define BUILD_NUMBER  100
+```
+
+```toml
+[env.version]
+source = "file"
+file = "version.h"
+template = """
+#define VERSION_MAJOR  ${MAJOR}
+#define VERSION_MINOR  ${MINOR}
+#define VERSION_PATCH  ${PATCH}
+#define BUILD_NUMBER   ${BUILD}
+"""
+
+[targets.release]
+output_name = "${PROJECT}_v${VER.MAJOR}.${VER.MINOR}.${VER.PATCH}_build${VER.BUILD}_${DATE}"
+# → myapp_v1.2.3_build100_20260125.hex
+```
+
+### Inline String Parsing (C header)
+
+```c
+// version.h
+#define VERSION_STR "v1.2.3"
 #define BUILD_NUMBER 100
 ```
 
 ```toml
 [env.version]
-source = "header"
+source = "file"
 file = "version.h"
-major = "VERSION_MAJOR"
-minor = "VERSION_MINOR"
-patch = "VERSION_PATCH"
-build = "BUILD_NUMBER"
-```
-
-**Supported number formats:**
-- Decimal: `100`
-- Hexadecimal: `0x64` or `0X64`
-- Binary: `0b01100100` or `0B01100100`
-
-### Flexible Field Mapping
-
-All field names in `[env.version]` are macro names from your header file. You can use any naming convention:
-
-```toml
-# Example 1: Uppercase with underscores
-major = "VERSION_MAJOR"
-minor = "VERSION_MINOR"
-patch = "VERSION_PATCH"
-
-# Example 2: Prefix notation
-major = "VER_MAJ"
-minor = "VER_MIN"
-patch = "VER_PAT"
-
-# Example 3: Camel case
-major = "VersionMajor"
-minor = "VersionMinor"
-patch = "VersionPatch"
-```
-
-## Template Variables
-
-Template variables use the `{VARIABLE_NAME}` syntax and can be used in any `output_name` field.
-
-### Version Variables
-
-These variables are available when `[env.version]` is configured:
-
-| Variable | Description | Example Value | Notes |
-|----------|-------------|---------------|-------|
-| `{MAJOR}` | Major version number | `1` | Always available |
-| `{MINOR}` | Minor version number | `2` | Always available |
-| `{PATCH}` | Patch version number | `3` | Always available |
-| `{VERSION}` | Basic version string | `1.2.3` | Format: `major.minor.patch` |
-| `{VERSION_FULL}` | Full semantic version | `1.2.3-beta.2+20260125` | Includes pre-release and metadata |
-| `{BUILD}` | Build number | `100` | Only if configured |
-| `{PRE_RELEASE}` | Pre-release identifier | `beta.2` | Only if present in string |
-| `{BUILD_METADATA}` | Build metadata | `20260125` | Only if present in string |
-
-### DateTime Variables
-
-These variables are always available and generated at build time:
-
-| Variable | Description | Example Value | Format |
-|----------|-------------|---------------|--------|
-| `{DATE}` | Current date | `20260125` | `YYYYmmdd` |
-| `{TIME}` | Current time | `143052` | `HHMMSS` |
-| `{DATETIME}` | Date and time | `20260125_143052` | `YYYYmmdd_HHMMSS` |
-| `{TIMESTAMP}` | Unix timestamp | `1737804652` | Seconds since epoch |
-
-### Project Variables
-
-These variables are always available:
-
-| Variable | Description | Example Value | Notes |
-|----------|-------------|---------------|-------|
-| `{PROJECT}` | Project name | `myapp` | From `[project].name` |
-| `{TARGET}` | Current target name | `release_build` | Build target being executed |
-
-## Examples
-
-### Example 1: Release Build with Full Version
-
-```toml
-[project]
-name = "firmware"
-
-[env.version]
-source = "header"
-file = "include/version.h"
-string = "FW_VERSION"
-build = "BUILD_NUM"
+template = """
+#define VERSION_STR "v${MAJOR}.${MINOR}.${PATCH}"
+#define BUILD_NUMBER ${BUILD}
+"""
 
 [targets.release]
-type = "merge"
-bootloader = "default"
-app_file = "build/app.hex"
-output_name = "{PROJECT}_v{VERSION_FULL}_{DATE}"
-# Output: firmware_v1.2.3-rc.1+git.abc123_20260125.hex
+output_name = "${PROJECT}_v${VER.MAJOR}.${VER.MINOR}.${VER.PATCH}_build${VER.BUILD}_${DATE}"
 ```
 
-### Example 2: Nightly Build with Timestamp
-
-```toml
-[targets.nightly]
-type = "pack"
-header = "ota_header"
-app_file = "build/app.bin"
-output_name = "{PROJECT}_nightly_{DATETIME}"
-# Output: firmware_nightly_20260125_143052.fpk
-```
-
-### Example 3: Development Build with Target Name
-
-```toml
-[targets.dev_debug]
-type = "convert"
-input_file = "build/debug.hex"
-output_format = "bin"
-output_name = "{PROJECT}_{TARGET}_{DATE}"
-# Output: firmware_dev_debug_20260125.bin
-```
-
-### Example 4: Multi-variant Builds
-
-```toml
-[env.version]
-source = "header"
-file = "version.h"
-major = "VER_MAJOR"
-minor = "VER_MINOR"
-patch = "VER_PATCH"
-
-[targets.factory_v1]
-type = "merge"
-bootloader = "v1_bootloader"
-app_file = "build/app_v1.hex"
-output_name = "{PROJECT}_factory_v{MAJOR}.{MINOR}.{PATCH}_hw1_{BUILD}"
-
-[targets.factory_v2]
-type = "merge"
-bootloader = "v2_bootloader"
-app_file = "build/app_v2.hex"
-output_name = "{PROJECT}_factory_v{MAJOR}.{MINOR}.{PATCH}_hw2_{BUILD}"
-```
-
-### Example 5: String-only Configuration
-
-When you only have a version string macro and no separate build number:
+### Hex Values
 
 ```c
-// version.h
-#define VERSION "v1.2.3"
+#define VER_MAJOR 0x01
+#define VER_MINOR 0x0A
+```
+
+```toml
+template = """
+#define VER_MAJOR ${MAJOR}
+#define VER_MINOR ${MINOR}
+#define VER_PATCH ${PATCH}
+"""
+# VER.MAJOR = 1 (u32), VER.MINOR = 10 (u32)
+```
+
+### CMakeLists.txt
+
+```cmake
+project(MyFirmware VERSION 1.2.3)
 ```
 
 ```toml
 [env.version]
-source = "header"
-file = "version.h"
-string = "VERSION"
-# No build, major, minor, or patch needed!
+source = "file"
+file = "CMakeLists.txt"
+template = 'project(MyFirmware VERSION ${MAJOR}.${MINOR}.${PATCH})'
+```
 
-[targets.release]
-output_name = "{PROJECT}_{VERSION}_{DATE}"
-# Output: myapp_1.2.3_20260125.hex
+### Python Package
+
+```python
+# src/__init__.py
+__version__ = "1.2.3"
+```
+
+```toml
+[env.version]
+source = "file"
+file = "src/__init__.py"
+template = '__version__ = "${MAJOR}.${MINOR}.${PATCH}"'
+```
+
+### Version Variables in OTA Header DSL
+
+```toml
+[headers.fpk]
+suffix = "fpk"
+def = """
+@endian = little;
+struct header @packed {
+    new_version: [u8; 16] = [${VER.MAJOR}, ${VER.MINOR}, ${VER.PATCH}];
+    timestamp:   u32      = ${UNIX_TIMESTAMP};
+    img_size:    u32      = @sizeof(image);
+    img_crc32:   u32      = @crc32(image);
+}
+"""
 ```
 
 ## Error Handling
 
-Baker validates template variables at build time and will fail with a clear error message if:
+### Template Pattern Not Matched
 
-1. **Undefined variable**: Template references a variable not available
-   ```
-   Error: missing template variable 'BUILD' in [env.version]
-   ```
-   **Solution**: Either remove `{BUILD}` from template or add `build = "BUILD_NUMBER"` to `[env.version]`
+Every template line with a `${VAR}` placeholder must match at least one line in the target file.
 
-2. **Missing configuration**: Required version fields not configured
-   ```
-   Error: required field 'string' or 'major'/'minor'/'patch' not configured in [env.version]
-   ```
-   **Solution**: Add either `string` or all three of `major`, `minor`, `patch`
+```
+Error: template pattern not matched in file: '#define VERSION_MAJOR  ${MAJOR}'
+```
 
-3. **Macro not found**: Specified macro doesn't exist in header file
-   ```
-   Error: macro 'VERSION_MAJOR' not found in header file
-   ```
-   **Solution**: Check spelling and ensure the macro is defined in the header file
+**Fix**: Check that the template line (spacing, macro name) matches the actual content of the file.
 
-4. **Parse error**: Invalid version string format
-   ```
-   Error: failed to parse version string '1.2': expected format: major.minor.patch
-   ```
-   **Solution**: Ensure version string follows semantic versioning format
+### Undefined Variable in output_name
 
-5. **Invalid number format**: Macro value cannot be parsed as integer
-   ```
-   Error: invalid macro value 'abc' for BUILD_NUMBER: not a valid integer
-   ```
-   **Solution**: Ensure numeric macros contain valid integers (decimal, hex, or binary)
+```
+Error: missing template variable 'VER.BUILD'
+```
 
-## Best Practices
+**Fix**: Add `${BUILD}` to your template, or remove `${VER.BUILD}` from `output_name`.
 
-1. **Use semantic versioning**: Follow the `major.minor.patch` format for consistency
-2. **Include build numbers**: Add build numbers for traceability in production
-3. **Use date stamps**: Include `{DATE}` or `{TIMESTAMP}` for time-based versioning
-4. **Keep names readable**: Balance uniqueness with human readability
-5. **Validate early**: Run `baker build` locally before CI/CD to catch template errors
-6. **Document variables**: Comment your templates to explain the naming scheme
+### File Not Found
 
-## Future Enhancements
+```
+Error: version file not found: version.h
+```
 
-The following version sources are planned but not yet implemented:
+**Fix**: Verify the `file` path is correct and relative to `baker.toml`.
 
-- **CMake**: Extract from `CMakeLists.txt` or `CMakeCache.txt`
-- **TOML**: Extract from `Cargo.toml` or custom TOML files
-- **Environment**: Extract from environment variables
-- **Git**: Extract from git tags and commit info
-
-Stay tuned for updates!

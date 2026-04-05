@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use log::{trace};
 use crate::config::{Bootloader, Config, ConvertTarget, MergeTarget, PackTarget, OutputFormat, Target, VersionSource};
 use crate::firmware::{self, ImageReader, ImageWriter};
-use crate::version::{VersionInfo, VersionExtractor, HeaderExtractor, VersionError};
+use crate::version::{TemplateExtractor, VersionError};
 use super::{Recipe, RecipeError, MergeRecipe, PackRecipe, ConvertRecipe, BuiltinHeaders};
 use super::pack::HeaderBuilder;
 
@@ -26,8 +26,8 @@ impl<'a> RecipeBuilder<'a> {
         
         // Extract and register version variables
         if let Some(ref version_config) = config.env.version {
-            let version_info = Self::extract_version(version_config, base_dir)?;
-            Self::register_version_variables(&mut env, &version_info);
+            let ver_vars = Self::extract_version(version_config, base_dir)?;
+            Self::register_version_variables(&mut env, ver_vars);
         }
         
         Ok(Self {
@@ -213,75 +213,35 @@ impl<'a> RecipeBuilder<'a> {
         }
     }
     
-    /// Extract version information from configured source
+    /// Extract version variables from the configured source.
+    /// Returns a map of `VER.*` keys ready to merge into the env.
     fn extract_version(
         version_config: &crate::config::VersionConfig,
         base_dir: &Path,
-    ) -> Result<VersionInfo, RecipeError> {
+    ) -> Result<std::collections::HashMap<String, delbin::Value>, RecipeError> {
         match version_config.source {
-            VersionSource::Header => {
-                let file_path = version_config.file.as_ref()
-                    .ok_or_else(|| RecipeError::VersionError(
-                        VersionError::MissingConfig("file".to_string())
-                    ))?;
-                
-                let full_path = if file_path.is_absolute() {
-                    file_path.clone()
+            VersionSource::File => {
+                let full_path = if version_config.file.is_absolute() {
+                    version_config.file.clone()
                 } else {
-                    base_dir.join(file_path)
+                    base_dir.join(&version_config.file)
                 };
-                
-                // Validate configuration: either string or (major+minor+patch) required
-                if version_config.string.is_none() 
-                    && (version_config.major.is_none() 
-                        || version_config.minor.is_none() 
-                        || version_config.patch.is_none()) {
-                    return Err(RecipeError::VersionError(
-                        VersionError::MissingConfig(
-                            "'string' or 'major'/'minor'/'patch'".to_string()
-                        )
-                    ));
-                }
-                
-                let extractor = HeaderExtractor::new(
-                    full_path,
-                    version_config.major.clone(),
-                    version_config.minor.clone(),
-                    version_config.patch.clone(),
-                )
-                .with_build(version_config.build.clone())
-                .with_pre_release(version_config.pre_release.clone())
-                .with_string(version_config.string.clone());
-                
-                Ok(extractor.extract()?)
+
+                let extractor = TemplateExtractor::new(full_path, version_config.template.clone());
+                Ok(extractor.extract_vars()?)
             }
-            _ => {
-                Err(RecipeError::VersionError(
-                    VersionError::UnsupportedSource(format!("{:?}", version_config.source))
-                ))
-            }
+            _ => Err(RecipeError::VersionError(
+                VersionError::UnsupportedSource(format!("{:?}", version_config.source))
+            )),
         }
     }
-    
-    /// Register version-related environment variables
-    fn register_version_variables(vars: &mut HashMap<String, delbin::Value>, version: &VersionInfo) {
-        vars.insert("VERSION_MAJOR".to_string(), delbin::Value::U32(version.major));
-        vars.insert("VERSION_MINOR".to_string(), delbin::Value::U32(version.minor));
-        vars.insert("VERSION_PATCH".to_string(), delbin::Value::U32(version.patch));
-        vars.insert("VERSION".to_string(), delbin::Value::String(version.version_string()));
-        vars.insert("VERSION_FULL".to_string(), delbin::Value::String(version.full_string()));
-        
-        if let Some(build) = version.build {
-            vars.insert("BUILD".to_string(), delbin::Value::U32(build));
-        }
-        
-        if let Some(ref pre) = version.pre_release {
-            vars.insert("PRE_RELEASE".to_string(), delbin::Value::String(pre.clone()));
-        }
-        
-        if let Some(ref meta) = version.build_metadata {
-            vars.insert("BUILD_METADATA".to_string(), delbin::Value::String(meta.clone()));
-        }
+
+    /// Merge extracted version variables (VER.*) into the env map.
+    fn register_version_variables(
+        env: &mut std::collections::HashMap<String, delbin::Value>,
+        ver_vars: std::collections::HashMap<String, delbin::Value>,
+    ) {
+        env.extend(ver_vars);
     }
     
     /// Register date/time environment variables
@@ -299,25 +259,25 @@ impl<'a> RecipeBuilder<'a> {
     /// Render template string with variables
     fn render_template(&self, template: &str, target_name: &str) -> Result<String, RecipeError> {
         let mut result = template.to_string();
-        
+
         // Add target name to temporary variables
         let mut vars = self.env.clone();
         vars.insert("TARGET".to_string(), delbin::Value::String(target_name.to_string()));
-        
-        // Replace all {VAR} placeholders
+
+        // Replace all ${VAR} placeholders (including dot-separated names like VER.MAJOR)
         for (key, value) in &vars {
-            let placeholder = format!("{{{}}}", key);
+            let placeholder = format!("${{{}}}", key);
             let value_str = Self::value_to_string(value);
             result = result.replace(&placeholder, &value_str);
         }
-        
-        // Check for undefined variables (remaining placeholders)
-        let re = regex::Regex::new(r"\{([A-Z_][A-Z0-9_]*)\}").unwrap();
+
+        // Check for undefined variables (remaining ${...} placeholders)
+        let re = regex::Regex::new(r"\$\{([A-Z_][A-Z0-9_.]*)\}").unwrap();
         if let Some(cap) = re.captures(&result) {
             let var_name = cap[1].to_string();
             return Err(RecipeError::MissingVariable(var_name));
         }
-        
+
         Ok(result)
     }
     

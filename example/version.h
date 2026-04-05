@@ -10,8 +10,11 @@
  */
 
 
-#define VERSION_MAJOR 1
-#define VERSION_MINOR 2
-#define VERSION_PATCH 3
-#define BUILD_NUMBER 100
-#define VERSION_STR "v2.3.4"
+// version.h  micros
+#define VERSION_MAJOR  1
+#define VERSION_MINOR  2
+#define VERSION_PATCH  3
+#define BUILD_NUMBER   100
+
+// version.h  str
+#define VERSION_STR   "v1.2.3"

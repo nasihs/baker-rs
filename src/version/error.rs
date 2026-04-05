@@ -9,15 +9,8 @@ pub enum VersionError {
     #[error("failed to read version file: {0}")]
     IoError(#[from] std::io::Error),
 
-    #[error("macro '{0}' not found in header file")]
-    MacroNotFound(String),
-
-    #[error("invalid macro value '{value}' for {name}: {reason}")]
-    InvalidMacroValue {
-        name: String,
-        value: String,
-        reason: String,
-    },
+    #[error("template pattern not matched in file: '{pattern}'")]
+    PatternNotMatched { pattern: String },
 
     #[error("failed to parse version string '{0}': {1}")]
     ParseError(String, String),

@@ -6,12 +6,14 @@ default = "merge_test"
 dir = "release"
 
 [env.version]
-source = "header"
+source = "file"
 file = "version.h"
-# Either 'string' OR (major+minor+patch) is required
-# 'string' supports v prefix (e.g., "v1.2.3")
-build = "BUILD_NUMBER" # Macro BUILD_NUMBER defined in version.h
-string = "VERSION_STR" # optional, Macro VERSION_STR defined in version.h
+template = """
+#define VERSION_MAJOR  ${MAJOR}
+#define VERSION_MINOR  ${MINOR}
+#define VERSION_PATCH  ${PATCH}
+#define BUILD_NUMBER   ${BUILD}
+"""
 
 [bootloaders.default]
 file = "build/bt.hex"
@@ -28,7 +30,7 @@ struct header @packed {
     magic:          [u8; 4] = @bytes("fpk");
     config:         u32 = 0;
     old_version:    [u8; 16];
-    new_version:    [u8; 16] = [${VERSION_MAJOR}, ${VERSION_MINOR}, ${VERSION_PATCH}];
+    new_version:    [u8; 16] = [${VER.MAJOR}, ${VER.MINOR}, ${VER.PATCH}];
     watermark:      [u8; 16] = @bytes("baker");
     partition:      [u8; 16] = @bytes("app");
     img_size:       u32 = @sizeof(image);
@@ -47,7 +49,7 @@ description = "Merge bootloader and app"
 bootloader = "default"
 app_file = "build/app.hex"
 output_format = "hex"  # use bin if not specified
-output_name = "{PROJECT}_v{VERSION}_build.{BUILD}_{DATE}"
+output_name = "${PROJECT}_v${VER.MAJOR}.${VER.MINOR}.${VER.PATCH}_build.${VER.BUILD}_${DATE}"
 
 [targets.pack_bin]
 type = "pack"
@@ -55,7 +57,7 @@ description = "Pack with custom header"
 header = "custom_fpk"  # use custom header
 app_file = "build/app.bin"
 app_offset = 0x8000  # needed if app is binary
-output_name = "{PROJECT}_v{VERSION}"
+output_name = "${PROJECT}_v${VER.MAJOR}.${VER.MINOR}.${VER.PATCH}"
 
 [targets.convert_bin]
 type = "convert"

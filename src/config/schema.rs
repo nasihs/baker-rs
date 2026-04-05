@@ -53,24 +53,17 @@ fn default_output_dir() -> PathBuf {
 #[derive(Debug, Deserialize, Clone)]
 pub struct VersionConfig {
     pub source: VersionSource,
-    pub file: Option<PathBuf>,       // Required for header/cmake/toml sources
-    
-    // Field mappings (macro names, variable names, or field names)
-    // All optional for maximum flexibility - at least `string` or (major+minor+patch) required
-    pub major: Option<String>,
-    pub minor: Option<String>,
-    pub patch: Option<String>,
-    pub build: Option<String>,
-    pub pre_release: Option<String>,
-    pub string: Option<String>,      // Full version string macro/variable
+    pub file: PathBuf,
+    /// Template lines describing the file structure. Lines containing ${VAR}
+    /// capture the value at that position into baker variable VER.VAR.
+    /// Example: '#define VERSION_MAJOR  ${MAJOR}' captures VER.MAJOR.
+    pub template: String,
 }
 
 #[derive(Debug, Deserialize, Clone, Copy)]
 #[serde(rename_all = "lowercase")]
 pub enum VersionSource {
-    Header,   // C/C++ header file
-    Cmake,    // CMakeLists.txt or CMakeCache.txt (not yet implemented)
-    Toml,     // TOML config file (not yet implemented)
+    File,     // Any text file (C headers, CMakeLists.txt, Python, etc.)
     Env,      // Environment variables (not yet implemented)
 }
 

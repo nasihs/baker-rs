@@ -1,10 +1,10 @@
 mod error;
 mod extractor;
-mod header;
+mod template;
 
 pub use error::VersionError;
 pub use extractor::VersionExtractor;
-pub use header::HeaderExtractor;
+pub use template::TemplateExtractor;
 
 use std::fmt;
 
