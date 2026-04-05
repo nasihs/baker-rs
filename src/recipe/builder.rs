@@ -258,14 +258,18 @@ impl<'a> RecipeBuilder<'a> {
     
     /// Render template string with variables
     fn render_template(&self, template: &str, target_name: &str) -> Result<String, RecipeError> {
-        let mut result = template.to_string();
-
-        // Add target name to temporary variables
         let mut vars = self.env.clone();
         vars.insert("TARGET".to_string(), delbin::Value::String(target_name.to_string()));
+        Self::render(&vars, template)
+    }
+
+    /// Core substitution logic: replace all `${VAR}` placeholders in `template`
+    /// using `vars`, then fail if any unresolved placeholders remain.
+    fn render(vars: &HashMap<String, delbin::Value>, template: &str) -> Result<String, RecipeError> {
+        let mut result = template.to_string();
 
         // Replace all ${VAR} placeholders (including dot-separated names like VER.MAJOR)
-        for (key, value) in &vars {
+        for (key, value) in vars {
             let placeholder = format!("${{{}}}", key);
             let value_str = Self::value_to_string(value);
             result = result.replace(&placeholder, &value_str);
@@ -301,5 +305,44 @@ impl<'a> RecipeBuilder<'a> {
                     .join("")
             },
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn vars(pairs: &[(&str, delbin::Value)]) -> HashMap<String, delbin::Value> {
+        pairs.iter().map(|(k, v)| (k.to_string(), v.clone())).collect()
+    }
+
+    #[test]
+    fn test_render_dotted_var_name() {
+        let env = vars(&[
+            ("VER.MAJOR", delbin::Value::U32(2)),
+            ("VER.MINOR", delbin::Value::U32(5)),
+        ]);
+        assert_eq!(
+            RecipeBuilder::render(&env, "fw_v${VER.MAJOR}.${VER.MINOR}").unwrap(),
+            "fw_v2.5"
+        );
+    }
+
+    #[test]
+    fn test_render_missing_variable() {
+        let env = vars(&[("VER.MAJOR", delbin::Value::U32(1))]);
+        match RecipeBuilder::render(&env, "fw_v${VER.MAJOR}_${VER.UNDEFINED}").unwrap_err() {
+            RecipeError::MissingVariable(name) => assert_eq!(name, "VER.UNDEFINED"),
+            other => panic!("unexpected error: {other}"),
+        }
+    }
+
+    #[test]
+    fn test_render_no_placeholders() {
+        let env = vars(&[("VER.MAJOR", delbin::Value::U32(1))]);
+        assert_eq!(
+            RecipeBuilder::render(&env, "firmware_latest").unwrap(),
+            "firmware_latest"
+        );
     }
 }

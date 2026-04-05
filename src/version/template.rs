@@ -312,4 +312,73 @@ mod tests {
             other => panic!("expected VER.BUILD = U32(42), got {:?}", other),
         }
     }
+
+    #[test]
+    fn test_file_not_found() {
+        let e = TemplateExtractor::new(
+            PathBuf::from("/nonexistent/path/version.h"),
+            "#define VERSION_MAJOR ${MAJOR}".to_string(),
+        );
+        match e.extract_vars().unwrap_err() {
+            VersionError::FileNotFound(_) => {}
+            other => panic!("expected FileNotFound, got {other}"),
+        }
+    }
+
+    #[test]
+    fn test_pattern_not_matched_reports_the_right_line() {
+        let content = "#define VERSION_MAJOR 1\n#define VERSION_MINOR 2\n";
+        let (_dir, path) = write_file(content);
+        // Third line (PATCH) has no matching line in the file.
+        let e = extractor(
+            path,
+            "#define VERSION_MAJOR ${MAJOR}\n#define VERSION_MINOR ${MINOR}\n#define VERSION_PATCH ${PATCH}",
+        );
+        match e.extract_vars().unwrap_err() {
+            VersionError::PatternNotMatched { pattern } => {
+                assert!(pattern.contains("VERSION_PATCH"), "expected PATCH pattern, got: {pattern}");
+            }
+            other => panic!("unexpected error: {other}"),
+        }
+    }
+
+    #[test]
+    fn test_string_type_inference() {
+        let content = r#"#define PRE_RELEASE "rc1""#;
+        let (_dir, path) = write_file(content);
+        let e = extractor(path, r#"#define PRE_RELEASE "${TAG}""#);
+        let vars = e.extract_vars().unwrap();
+        match vars.get("VER.TAG") {
+            Some(delbin::Value::String(s)) => assert_eq!(s, "rc1"),
+            other => panic!("expected VER.TAG = String(\"rc1\"), got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_binary_literal() {
+        let content = "#define FLAGS 0b1010\n";
+        let (_dir, path) = write_file(content);
+        let e = extractor(path, "#define FLAGS ${FLAGS}");
+        let vars = e.extract_vars().unwrap();
+        match vars.get("VER.FLAGS") {
+            Some(delbin::Value::U32(10)) => {}
+            other => panic!("expected VER.FLAGS = U32(10), got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_template_ignores_empty_and_comment_lines() {
+        let content = "#define VERSION_MAJOR 3\n";
+        let (_dir, path) = write_file(content);
+        // Template has blank lines and a comment line alongside the real pattern.
+        let e = extractor(
+            path,
+            "\n// version macros\n#define VERSION_MAJOR ${MAJOR}\n\n",
+        );
+        let vars = e.extract_vars().unwrap();
+        match vars.get("VER.MAJOR") {
+            Some(delbin::Value::U32(3)) => {}
+            other => panic!("expected VER.MAJOR = U32(3), got {:?}", other),
+        }
+    }
 }
