@@ -1,0 +1,21 @@
+[project]
+name = "my_firmware"
+default = "release"
+
+[env.output]
+dir = "release"
+
+[env.version]
+source = "file"
+file = "version.h"
+template = """
+#define FW_VERSION   "v${MAJOR}.${MINOR}.${PATCH}"
+#define BUILD_NUMBER ${BUILD}
+"""
+
+[targets.release]
+type = "convert"
+description = "Convert while demonstrating string-macro version extraction"
+input_file = "build/app.hex"
+output_format = "bin"
+output_name = "${PROJECT}_v${VER.MAJOR}.${VER.MINOR}.${VER.PATCH}_build${VER.BUILD}"

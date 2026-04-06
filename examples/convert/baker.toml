@@ -1,0 +1,23 @@
+[project]
+name = "my_firmware"
+default = "all"
+
+[env.output]
+dir = "release"
+
+[targets.to_bin]
+type = "convert"
+description = "Convert HEX to raw binary"
+input_file = "build/app.hex"
+output_format = "bin"
+output_name = "${PROJECT}_${TIME.YYYYMMDD}"
+
+[targets.to_srec]
+type = "convert"
+description = "Convert HEX to Motorola S-record"
+input_file = "build/app.hex"
+output_format = "srec"
+output_name = "${PROJECT}_${TIME.YYYYMMDD}"
+
+[groups]
+all = ["to_bin", "to_srec"]

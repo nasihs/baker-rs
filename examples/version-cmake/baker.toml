@@ -1,0 +1,18 @@
+[project]
+name = "my_firmware"
+default = "release"
+
+[env.output]
+dir = "release"
+
+[env.version]
+source = "file"
+file = "CMakeLists.txt"
+template = 'project(MyFirmware VERSION ${MAJOR}.${MINOR}.${PATCH})'
+
+[targets.release]
+type = "convert"
+description = "Convert while demonstrating CMake version extraction"
+input_file = "build/app.hex"
+output_format = "bin"
+output_name = "${PROJECT}_v${VER.MAJOR}.${VER.MINOR}.${VER.PATCH}"

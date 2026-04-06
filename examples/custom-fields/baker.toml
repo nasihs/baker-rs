@@ -1,0 +1,23 @@
+[project]
+name = "my_firmware"
+default = "release"
+
+[env.output]
+dir = "release"
+
+[env.version]
+source = "file"
+file = "board_config.h"
+template = """
+#define BOARD_ID     ${BOARD}
+#define HW_REVISION  ${HW_REV}
+#define FW_MAJOR     ${MAJOR}
+#define FW_MINOR     ${MINOR}
+"""
+
+[targets.release]
+type = "convert"
+description = "Convert while demonstrating custom field extraction"
+input_file = "build/app.hex"
+output_format = "bin"
+output_name = "${PROJECT}_board${VER.BOARD}_hwrev${VER.HW_REV}_v${VER.MAJOR}.${VER.MINOR}"

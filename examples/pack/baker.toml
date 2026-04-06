@@ -1,0 +1,40 @@
+[project]
+name = "my_firmware"
+default = "release"
+
+[env.output]
+dir = "release"
+
+[env.version]
+source = "file"
+file = "version.h"
+template = """
+#define VERSION_MAJOR  ${MAJOR}
+#define VERSION_MINOR  ${MINOR}
+#define VERSION_PATCH  ${PATCH}
+#define BUILD_NUMBER   ${BUILD}
+"""
+
+[headers.fpk]
+suffix = "fpk"
+def = """
+@endian = little;
+
+struct header @packed {
+    magic:       [u8; 4]  = @bytes("fpk!");
+    version:     [u8; 4]  = [${VER_MAJOR}, ${VER_MINOR}, ${VER_PATCH}, 0];
+    build:       u32      = ${VER_BUILD};
+    timestamp:   u32      = ${TIME_EPOCH32};
+    img_size:    u32      = @sizeof(image);
+    img_crc32:   u32      = @crc32(image);
+    _padding:    [u8; 256 - @offsetof(_padding)];
+}
+"""
+
+[targets.release]
+type = "pack"
+description = "Package app binary with OTA header"
+header = "fpk"
+app_file = "build/app.bin"
+app_offset = 0x8000
+output_name = "${PROJECT}_v${VER.MAJOR}.${VER.MINOR}.${VER.PATCH}_build${VER.BUILD}"

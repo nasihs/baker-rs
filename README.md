@@ -94,10 +94,13 @@ A command-line tool for automating embedded firmware post-build packaging, writt
 
 1. Run Baker
    ```bash
-   baker build              # Build default target/group
+   baker build              # Build default target/group (searches baker.toml in cwd)
    baker build factory      # Build specific target/group
+   baker build -c path/to/baker.toml  # Explicit config path
    baker list               # List all targets/groups
    ```
+
+> **Tip:** See the [`examples/`](examples/) directory for focused, runnable examples covering merge, pack, convert, version extraction, and more.
 
 ## Version Extraction & Template Variables
 
