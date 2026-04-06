@@ -15,21 +15,17 @@ pub struct RecipeBuilder<'a> {
 
 impl<'a> RecipeBuilder<'a> {
     pub fn new(config: &'a Config, base_dir: &Path) -> Result<Self, RecipeError> {
-        // Extract version information and build environment variables
         let mut env = HashMap::new();
-        
-        // Add project name
+
         env.insert("PROJECT".to_string(), delbin::Value::String(config.project.name.clone()));
-        
-        // Add date/time variables
-        Self::register_datetime_variables(&mut env);
-        
-        // Extract and register version variables
+        Self::register_time_variables(&mut env);
+        Self::register_git_variables(&mut env);
+
         if let Some(ref version_config) = config.env.version {
             let ver_vars = Self::extract_version(version_config, base_dir)?;
             Self::register_version_variables(&mut env, ver_vars);
         }
-        
+
         Ok(Self {
             config,
             base_dir: base_dir.to_path_buf(),
@@ -245,15 +241,33 @@ impl<'a> RecipeBuilder<'a> {
     }
     
     /// Register date/time environment variables
-    fn register_datetime_variables(vars: &mut HashMap<String, delbin::Value>) {
+    fn register_time_variables(vars: &mut HashMap<String, delbin::Value>) {
         use chrono::Local;
         let now = Local::now();
-        
-        vars.insert("DATE".to_string(), delbin::Value::String(now.format("%Y%m%d").to_string()));
-        vars.insert("TIME".to_string(), delbin::Value::String(now.format("%H%M%S").to_string()));
-        vars.insert("DATETIME".to_string(), delbin::Value::String(now.format("%Y%m%d_%H%M%S").to_string()));
-        vars.insert("TIMESTAMP".to_string(), delbin::Value::U32(now.timestamp() as u32));
-        vars.insert("UNIX_TIMESTAMP".to_string(), delbin::Value::U32(now.timestamp() as u32));
+        let s = |v: String| delbin::Value::String(v);
+        vars.insert("TIME.YYYYMMDD".to_string(),   s(now.format("%Y%m%d").to_string()));
+        vars.insert("TIME.YYMMDD".to_string(),     s(now.format("%y%m%d").to_string()));
+        vars.insert("TIME.HHMMSS".to_string(),     s(now.format("%H%M%S").to_string()));
+        vars.insert("TIME.YYMMDDHHMM".to_string(), s(now.format("%y%m%d%H%M").to_string()));
+        vars.insert("TIME.DATETIME".to_string(),   s(now.format("%Y%m%d_%H%M%S").to_string()));
+        let epoch = now.timestamp() as u64;
+        vars.insert("TIME.EPOCH".to_string(),   delbin::Value::U64(epoch));
+        vars.insert("TIME.EPOCH32".to_string(), delbin::Value::U32(epoch as u32)); // truncates high bits; safe until year 2106
+    }
+
+    /// Register git variables. Only `GIT.HASH` is provided; it is only inserted
+    /// when a git repository and HEAD commit are available. If the caller uses
+    /// `${GIT.HASH}` outside a git repo, render_template reports MissingVariable.
+    fn register_git_variables(vars: &mut HashMap<String, delbin::Value>) {
+        use std::process::Command;
+        if let Ok(out) = Command::new("git").args(["rev-parse", "--short", "HEAD"]).output() {
+            if out.status.success() {
+                let hash = String::from_utf8_lossy(&out.stdout).trim().to_string();
+                if !hash.is_empty() {
+                    vars.insert("GIT.HASH".to_string(), delbin::Value::String(hash));
+                }
+            }
+        }
     }
     
     /// Render template string with variables

@@ -30,7 +30,7 @@ pub enum RecipeError {
     #[error(transparent)]
     VersionError(#[from] crate::version::VersionError),
 
-    #[error("missing template variable '{0}' in [env.version]")]
+    #[error("undefined variable '${{{}}}' in template", .0)]
     MissingVariable(String),
 
     #[error("build failed for '{name}': {reason}")]

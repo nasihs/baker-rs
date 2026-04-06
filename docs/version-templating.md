@@ -105,17 +105,19 @@ These are defined entirely by your `template`. The names shown below are convent
 | `${BUILD}` | `${VER.BUILD}` | Build/revision number |
 | `${ANY_NAME}` | `${VER.ANY_NAME}` | Any custom field |
 
-### DateTime Variables
+### Date/Time Variables
 
 Always available, generated at build time:
 
 | Variable | Description | Example | Format |
 |---|---|---|---|
-| `${DATE}` | Current date | `20260125` | `YYYYmmdd` |
-| `${TIME}` | Current time | `143052` | `HHMMSS` |
-| `${DATETIME}` | Date and time combined | `20260125_143052` | `YYYYmmdd_HHMMSS` |
-| `${TIMESTAMP}` | Unix timestamp | `1737804652` | Seconds since epoch |
-| `${UNIX_TIMESTAMP}` | Unix timestamp (alias) | `1737804652` | Seconds since epoch |
+| `${TIME.YYYYMMDD}` | Current date (4-digit year) | `20260405` | `YYYYmmdd` |
+| `${TIME.YYMMDD}` | Current date (2-digit year) | `260405` | `yymmdd` |
+| `${TIME.HHMMSS}` | Current time | `143052` | `HHmmss` |
+| `${TIME.YYMMDDHHMM}` | Date + hour + minute | `2604051430` | `yymmddHHMM` |
+| `${TIME.DATETIME}` | Date and time combined | `20260405_143052` | `YYYYmmdd_HHmmss` |
+| `${TIME.EPOCH}` | Unix timestamp | `1743901375` | Seconds since epoch (u64) |
+| `${TIME.EPOCH32}` | Unix timestamp (u32) | `1743901375` | Same value, u32 type — use this in delbin `u32` fields; safe until year 2106 |
 
 ### Project Variables
 
@@ -125,6 +127,14 @@ Always available:
 |---|---|---|
 | `${PROJECT}` | Project name | `myapp` |
 | `${TARGET}` | Name of the target being built | `release_build` |
+
+### Git Variables
+
+Available only when baker is run inside a git repository:
+
+| Variable | Description | Example | Notes |
+|---|---|---|---|
+| `${GIT.HASH}` | Short commit hash | `a1b2c3d` | Error if not in a git repo |
 
 ## Examples
 
@@ -150,8 +160,8 @@ template = """
 """
 
 [targets.release]
-output_name = "${PROJECT}_v${VER.MAJOR}.${VER.MINOR}.${VER.PATCH}_build${VER.BUILD}_${DATE}"
-# → myapp_v1.2.3_build100_20260125.hex
+output_name = "${PROJECT}_v${VER.MAJOR}.${VER.MINOR}.${VER.PATCH}_build${VER.BUILD}_${TIME.YYYYMMDD}"
+# → myapp_v1.2.3_build100_20260405.hex
 ```
 
 ### Inline String Parsing (C header)
@@ -172,7 +182,7 @@ template = """
 """
 
 [targets.release]
-output_name = "${PROJECT}_v${VER.MAJOR}.${VER.MINOR}.${VER.PATCH}_build${VER.BUILD}_${DATE}"
+output_name = "${PROJECT}_v${VER.MAJOR}.${VER.MINOR}.${VER.PATCH}_build${VER.BUILD}_${TIME.YYYYMMDD}"
 ```
 
 ### Hex Values
@@ -227,7 +237,7 @@ def = """
 @endian = little;
 struct header @packed {
     new_version: [u8; 16] = [${VER.MAJOR}, ${VER.MINOR}, ${VER.PATCH}];
-    timestamp:   u32      = ${UNIX_TIMESTAMP};
+    timestamp:   u32      = ${TIME.EPOCH32};
     img_size:    u32      = @sizeof(image);
     img_crc32:   u32      = @crc32(image);
 }

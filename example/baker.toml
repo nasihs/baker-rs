@@ -35,7 +35,7 @@ struct header @packed {
     partition:      [u8; 16] = @bytes("app");
     img_size:       u32 = @sizeof(image);
     packed_size:    u32 = @sizeof(image);
-    timestamp:      u32 = ${UNIX_TIMESTAMP};
+    timestamp:      u32 = ${TIME.EPOCH32};
     img_crc32:      u32 = @crc32(image);
     packed_crc32:   u32 = @crc32(image);
     header_crc32:   u32 = @crc32(@self[..header_crc32]);

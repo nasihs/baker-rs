@@ -1,10 +1,11 @@
 [package]
 name = "baker-rs"
-version = "0.2.0"
+version = "0.3.0-alpha.1"
 edition = "2021"
 authors = ["nasihs <nasihs1113@gmail.com>"]
 description = "Build Automation Kit for Embedded Release"
 repository = "https://github.com/nasihs/baker-rs"
+license = "MIT"
 
 [[bin]]
 name = "baker"
@@ -20,7 +21,7 @@ serde = { version = "1.0.228", features = ["derive"] }
 srec = "0.2.0"
 tempfile = "3.24.0"
 thiserror = "2.0.17"
-toml = "0.9.10"
-delbin = { git = "https://github.com/nasihs/delbin", branch = "main" }
+toml = "1.1.2+spec-1.1.0"
+delbin = "0.1.0"
 regex = "1.12.2"
 chrono = "0.4.43"
