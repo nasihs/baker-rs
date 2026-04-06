@@ -26,6 +26,11 @@ impl<'a> RecipeBuilder<'a> {
             Self::register_version_variables(&mut env, ver_vars);
         }
 
+        // Add underscore aliases for all dotted keys so they are usable inside
+        // the delbin DSL, which only allows simple identifiers (no dots).
+        // Example: "VER.MAJOR" → "VER_MAJOR", "TIME.EPOCH32" → "TIME_EPOCH32".
+        Self::register_flat_aliases(&mut env);
+
         Ok(Self {
             config,
             base_dir: base_dir.to_path_buf(),
@@ -270,6 +275,20 @@ impl<'a> RecipeBuilder<'a> {
         }
     }
     
+    /// Add underscore aliases for all dotted keys (e.g. "VER.MAJOR" → "VER_MAJOR").
+    /// Required so dotted baker variables can be referenced in the delbin DSL,
+    /// whose identifier grammar does not allow dots.
+    fn register_flat_aliases(vars: &mut HashMap<String, delbin::Value>) {
+        let aliases: Vec<(String, delbin::Value)> = vars
+            .iter()
+            .filter(|(k, _)| k.contains('.'))
+            .map(|(k, v)| (k.replace('.', "_"), v.clone()))
+            .collect();
+        for (flat_key, value) in aliases {
+            vars.entry(flat_key).or_insert(value);
+        }
+    }
+
     /// Render template string with variables
     fn render_template(&self, template: &str, target_name: &str) -> Result<String, RecipeError> {
         let mut vars = self.env.clone();
