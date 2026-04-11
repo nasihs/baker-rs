@@ -1,10 +1,11 @@
 use std::path::{Path, PathBuf};
 use std::collections::HashMap;
 use log::{trace};
-use crate::config::{Bootloader, Config, ConvertTarget, MergeTarget, PackTarget, OutputFormat, Target, VersionSource};
+use crate::config::{Bootloader, Config, ConvertTarget, MergeTarget, PackTarget, OutputFormat, PostBuildHook, Target, VersionSource};
 use crate::firmware::{self, ImageReader, ImageWriter};
 use crate::version::{TemplateExtractor, VersionError};
 use super::{Recipe, RecipeError, MergeRecipe, PackRecipe, ConvertRecipe, BuiltinHeaders};
+use super::hook::HookRunner;
 use super::pack::HeaderBuilder;
 
 pub struct RecipeBuilder<'a> {
@@ -103,6 +104,7 @@ impl<'a> RecipeBuilder<'a> {
             app_reader,
             writer,
             output_path,
+            hook: self.build_hook(t.post_build.as_ref(), name),
         })
     }
     
@@ -125,6 +127,7 @@ impl<'a> RecipeBuilder<'a> {
             reader,
             writer,
             output_path,
+            hook: self.build_hook(t.post_build.as_ref(), name),
         })
     }
     
@@ -168,6 +171,7 @@ impl<'a> RecipeBuilder<'a> {
             writer,
             output_path,
             header_builder,
+            hook: self.build_hook(t.post_build.as_ref(), name),
         })
     }
     
@@ -289,93 +293,21 @@ impl<'a> RecipeBuilder<'a> {
         }
     }
 
-    /// Render template string with variables
     fn render_template(&self, template: &str, target_name: &str) -> Result<String, RecipeError> {
         let mut vars = self.env.clone();
         vars.insert("TARGET".to_string(), delbin::Value::String(target_name.to_string()));
-        Self::render(&vars, template)
+        super::render::render_template(&vars, template)
     }
 
-    /// Core substitution logic: replace all `${VAR}` placeholders in `template`
-    /// using `vars`, then fail if any unresolved placeholders remain.
-    fn render(vars: &HashMap<String, delbin::Value>, template: &str) -> Result<String, RecipeError> {
-        let mut result = template.to_string();
-
-        // Replace all ${VAR} placeholders (including dot-separated names like VER.MAJOR)
-        for (key, value) in vars {
-            let placeholder = format!("${{{}}}", key);
-            let value_str = Self::value_to_string(value);
-            result = result.replace(&placeholder, &value_str);
-        }
-
-        // Check for undefined variables (remaining ${...} placeholders)
-        let re = regex::Regex::new(r"\$\{([A-Z_][A-Z0-9_.]*)\}").unwrap();
-        if let Some(cap) = re.captures(&result) {
-            let var_name = cap[1].to_string();
-            return Err(RecipeError::MissingVariable(var_name));
-        }
-
-        Ok(result)
-    }
-    
-    /// Convert delbin::Value to string for template rendering
-    fn value_to_string(value: &delbin::Value) -> String {
-        match value {
-            delbin::Value::U8(v) => v.to_string(),
-            delbin::Value::U16(v) => v.to_string(),
-            delbin::Value::U32(v) => v.to_string(),
-            delbin::Value::U64(v) => v.to_string(),
-            delbin::Value::I8(v) => v.to_string(),
-            delbin::Value::I16(v) => v.to_string(),
-            delbin::Value::I32(v) => v.to_string(),
-            delbin::Value::I64(v) => v.to_string(),
-            delbin::Value::String(s) => s.clone(),
-            delbin::Value::Bytes(b) => {
-                // Convert bytes to hex string
-                b.iter()
-                    .map(|byte| format!("{:02X}", byte))
-                    .collect::<Vec<_>>()
-                    .join("")
-            },
-        }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn vars(pairs: &[(&str, delbin::Value)]) -> HashMap<String, delbin::Value> {
-        pairs.iter().map(|(k, v)| (k.to_string(), v.clone())).collect()
-    }
-
-    #[test]
-    fn test_render_dotted_var_name() {
-        let env = vars(&[
-            ("VER.MAJOR", delbin::Value::U32(2)),
-            ("VER.MINOR", delbin::Value::U32(5)),
-        ]);
-        assert_eq!(
-            RecipeBuilder::render(&env, "fw_v${VER.MAJOR}.${VER.MINOR}").unwrap(),
-            "fw_v2.5"
-        );
-    }
-
-    #[test]
-    fn test_render_missing_variable() {
-        let env = vars(&[("VER.MAJOR", delbin::Value::U32(1))]);
-        match RecipeBuilder::render(&env, "fw_v${VER.MAJOR}_${VER.UNDEFINED}").unwrap_err() {
-            RecipeError::MissingVariable(name) => assert_eq!(name, "VER.UNDEFINED"),
-            other => panic!("unexpected error: {other}"),
-        }
-    }
-
-    #[test]
-    fn test_render_no_placeholders() {
-        let env = vars(&[("VER.MAJOR", delbin::Value::U32(1))]);
-        assert_eq!(
-            RecipeBuilder::render(&env, "firmware_latest").unwrap(),
-            "firmware_latest"
-        );
+    fn build_hook(&self, cfg: Option<&PostBuildHook>, target_name: &str) -> Option<HookRunner> {
+        cfg.map(|hook_cfg| {
+            let mut vars = self.env.clone();
+            vars.insert("TARGET".to_string(), delbin::Value::String(target_name.to_string()));
+            HookRunner {
+                command: hook_cfg.command.clone(),
+                arg_templates: hook_cfg.args.clone(),
+                vars,
+            }
+        })
     }
 }

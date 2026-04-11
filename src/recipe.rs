@@ -3,6 +3,8 @@ mod merge;
 mod pack;
 mod convert;
 mod builder;
+mod render;
+mod hook;
 
 pub use error::RecipeError;
 pub use merge::MergeRecipe;

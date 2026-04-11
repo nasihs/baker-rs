@@ -122,6 +122,7 @@ pub struct MergeTarget {
     pub output_format: OutputFormat,
     pub output_name: Option<String>,  // if not defined, use target name as default
     pub output_dir: Option<PathBuf>,
+    pub post_build: Option<PostBuildHook>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -137,6 +138,7 @@ pub struct ConvertTarget {
     
     pub output_name: Option<String>,
     pub output_dir: Option<PathBuf>,
+    pub post_build: Option<PostBuildHook>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -150,8 +152,16 @@ pub struct PackTarget {
     
     pub output_name: Option<String>,  // if not defined, use target name as default
     pub output_dir: Option<PathBuf>,
+    pub post_build: Option<PostBuildHook>,
 }
 
+
+#[derive(Debug, Deserialize, Clone)]
+pub struct PostBuildHook {
+    pub command: String,
+    #[serde(default)]
+    pub args: Vec<String>,
+}
 
 #[derive(Debug, Default, Clone, Copy, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
@@ -201,4 +211,55 @@ impl Group {
 
 fn default_fill_byte() -> u8 {
     0xFF
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_post_build_hook_deserialization() {
+        let toml_str = r#"
+            [project]
+            name = "test"
+            default = "t1"
+
+            [targets.t1]
+            type = "convert"
+            input_file = "build/app.hex"
+
+            [targets.t1.post_build]
+            command = "jflash.exe"
+            args = ["-openprj", "device.jflash", "-open", "${OUTPUT_FILE}"]
+        "#;
+        let config: Config = toml::from_str(toml_str).unwrap();
+        let target = config.targets.get("t1").unwrap();
+        let hook = match target {
+            Target::Convert(t) => t.post_build.as_ref().unwrap(),
+            _ => panic!("expected convert target"),
+        };
+        assert_eq!(hook.command, "jflash.exe");
+        assert_eq!(hook.args[0], "-openprj");
+        assert_eq!(hook.args[3], "${OUTPUT_FILE}");
+    }
+
+    #[test]
+    fn test_post_build_hook_optional() {
+        let toml_str = r#"
+            [project]
+            name = "test"
+            default = "t1"
+
+            [targets.t1]
+            type = "convert"
+            input_file = "build/app.hex"
+        "#;
+        let config: Config = toml::from_str(toml_str).unwrap();
+        let target = config.targets.get("t1").unwrap();
+        let hook = match target {
+            Target::Convert(t) => &t.post_build,
+            _ => panic!("expected convert target"),
+        };
+        assert!(hook.is_none());
+    }
 }

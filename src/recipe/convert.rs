@@ -2,6 +2,7 @@ use std::path::PathBuf;
 use std::fmt::{Display, Formatter};
 use crate::firmware::{ImageReader, ImageWriter};
 use super::{Recipe, CookResult, RecipeError};
+use super::hook::HookRunner;
 
 /// Format convertion
 pub struct ConvertRecipe {
@@ -10,6 +11,7 @@ pub struct ConvertRecipe {
     pub(super) reader: Box<dyn ImageReader>,
     pub(super) writer: Box<dyn ImageWriter>,
     pub(super) output_path: PathBuf,
+    pub(super) hook: Option<HookRunner>,
 }
 
 impl Recipe for ConvertRecipe {
@@ -27,6 +29,10 @@ impl Recipe for ConvertRecipe {
         
         println!("  Converting: {}", self.output_path.display());
         self.writer.write(&image)?;
+        
+        if let Some(hook) = &self.hook {
+            hook.run(&self.output_path)?;
+        }
         
         Ok(CookResult::Single {
             name: self.name.clone(),

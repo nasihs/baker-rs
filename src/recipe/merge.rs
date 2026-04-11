@@ -2,6 +2,7 @@ use std::path::PathBuf;
 use std::fmt::{Display, Formatter};
 use crate::firmware::{ImageReader, ImageWriter};
 use super::{Recipe, CookResult, RecipeError};
+use super::hook::HookRunner;
 
 pub struct MergeRecipe {
     pub(super) name: String,
@@ -10,6 +11,7 @@ pub struct MergeRecipe {
     pub(super) app_reader: Box<dyn ImageReader>,
     pub(super) writer: Box<dyn ImageWriter>,
     pub(super) output_path: PathBuf,
+    pub(super) hook: Option<HookRunner>,
 }
 
 impl Recipe for MergeRecipe {
@@ -33,6 +35,10 @@ impl Recipe for MergeRecipe {
         
         println!("  Writing: {}", self.output_path.display());
         self.writer.write(&image)?;
+        
+        if let Some(hook) = &self.hook {
+            hook.run(&self.output_path)?;
+        }
         
         Ok(CookResult::Single {
             name: self.name.clone(),

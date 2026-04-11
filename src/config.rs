@@ -4,6 +4,6 @@ mod schema;
 
 pub use error::ConfigError;
 pub use schema::{
-    Bootloader, Config, ConvertTarget, Env, Group, HeaderDef, MergeTarget, PackTarget, OutputConfig, OutputFormat,
-    Project, Target, VersionConfig, VersionSource,
+    Bootloader, Config, ConvertTarget, Env, Group, HeaderDef, MergeTarget, PackTarget,
+    OutputConfig, OutputFormat, PostBuildHook, Project, Target, VersionConfig, VersionSource,
 };

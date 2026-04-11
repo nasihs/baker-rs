@@ -3,6 +3,7 @@ use std::fmt::{Display, Formatter};
 use std::collections::HashMap;
 use crate::firmware::{ImageReader, ImageWriter};
 use super::{Recipe, CookResult, RecipeError};
+use super::hook::HookRunner;
 
 /// Create .delbin file under builtin_headers to add new builtin header support
 macro_rules! define_builtin_headers {
@@ -47,6 +48,7 @@ pub struct PackRecipe {
     pub(super) writer: Box<dyn ImageWriter>,
     pub(super) output_path: PathBuf,
     pub(super) header_builder: HeaderBuilder,
+    pub(super) hook: Option<HookRunner>,
 }
 
 pub(super) struct HeaderBuilder {
@@ -127,6 +129,10 @@ impl Recipe for PackRecipe {
         
         println!("  Writing: {}", self.output_path.display());
         self.writer.write(&new_image)?;
+        
+        if let Some(hook) = &self.hook {
+            hook.run(&self.output_path)?;
+        }
         
         Ok(CookResult::Single {
             name: self.name.clone(),

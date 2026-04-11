@@ -46,4 +46,22 @@ pub enum RecipeError {
     HeaderExists { 
         name: String,
     },
+
+    #[error("external tool not found: '{0}' (is it installed and on PATH?)")]
+    ExternalToolNotFound(String),
+
+    #[error("external tool '{command}' failed with exit code {exit_code}{}", format_tool_output(.stdout, .stderr))]
+    ExternalToolFailed {
+        command: String,
+        exit_code: String,
+        stdout: String,
+        stderr: String,
+    },
+}
+
+fn format_tool_output(stdout: &str, stderr: &str) -> String {
+    let mut parts = Vec::new();
+    if !stderr.is_empty() { parts.push(format!("stderr: {}", stderr)); }
+    if !stdout.is_empty() { parts.push(format!("stdout: {}", stdout)); }
+    if parts.is_empty() { String::new() } else { format!(": {}", parts.join("; ")) }
 }
