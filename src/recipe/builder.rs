@@ -203,6 +203,7 @@ impl<'a> RecipeBuilder<'a> {
             "srec" | "s19" | "s28" | "s37" => {
                 Ok(Box::new(firmware::srec::SrecReader::new(path)))
             }
+            "elf" | "axf" => Ok(Box::new(firmware::elf::ElfReader::new(path))),
             _ => {
                 Err(RecipeError::UnsupportedFormat(extension.to_owned()))
             }
@@ -309,5 +310,63 @@ impl<'a> RecipeBuilder<'a> {
                 vars,
             }
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::io::Write;
+    use tempfile::Builder;
+
+    /// Minimal ELF32 LE binary: one PT_LOAD, VMA=0x20000000, LMA=0x08000000, 4 bytes payload.
+    fn make_elf32_le_bytes() -> Vec<u8> {
+        vec![
+            0x7f, 0x45, 0x4c, 0x46, 0x01, 0x01, 0x01,
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x02, 0x00, 0x28, 0x00, 0x01, 0x00, 0x00, 0x00,
+            0x00, 0x00, 0x00, 0x08,
+            0x34, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x34, 0x00, 0x20, 0x00, 0x01, 0x00, 0x28, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x01, 0x00, 0x00, 0x00,
+            0x54, 0x00, 0x00, 0x00,
+            0x00, 0x00, 0x00, 0x20,
+            0x00, 0x00, 0x00, 0x08,
+            0x04, 0x00, 0x00, 0x00,
+            0x04, 0x00, 0x00, 0x00,
+            0x05, 0x00, 0x00, 0x00,
+            0x04, 0x00, 0x00, 0x00,
+            0xDE, 0xAD, 0xBE, 0xEF,
+        ]
+    }
+
+    fn write_temp_elf(suffix: &str) -> tempfile::NamedTempFile {
+        let mut f = Builder::new().suffix(suffix).tempfile().unwrap();
+        f.write_all(&make_elf32_le_bytes()).unwrap();
+        f
+    }
+
+    #[test]
+    fn test_create_reader_dispatches_elf_extension() {
+        let f = write_temp_elf(".elf");
+        let config: crate::config::Config = toml::from_str(
+            "[project]\nname = \"test\"\ndefault = \"t\"\n"
+        ).unwrap();
+        let builder = RecipeBuilder::new(&config, f.path().parent().unwrap()).unwrap();
+        let reader = builder.create_reader(f.path(), None).unwrap();
+        let image = reader.read().unwrap();
+        assert_eq!(image.address_range(), Some((0x08000000, 0x08000003)));
+    }
+
+    #[test]
+    fn test_create_reader_dispatches_axf_extension() {
+        let f = write_temp_elf(".axf");
+        let config: crate::config::Config = toml::from_str(
+            "[project]\nname = \"test\"\ndefault = \"t\"\n"
+        ).unwrap();
+        let builder = RecipeBuilder::new(&config, f.path().parent().unwrap()).unwrap();
+        let reader = builder.create_reader(f.path(), None).unwrap();
+        let image = reader.read().unwrap();
+        assert_eq!(image.address_range(), Some((0x08000000, 0x08000003)));
     }
 }

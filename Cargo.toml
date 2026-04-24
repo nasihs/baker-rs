@@ -19,6 +19,7 @@ ihex = "3.0.0"
 log = "0.4.29"
 serde = { version = "1.0.228", features = ["derive"] }
 srec = "0.2.0"
+object = { version = "0.36", default-features = false, features = ["read_core", "elf"] }
 tempfile = "3.24.0"
 thiserror = "2.0.17"
 toml = "1.1.2+spec-1.1.0"

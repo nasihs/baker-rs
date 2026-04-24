@@ -23,6 +23,12 @@ pub enum FirmwareError {
     #[error("{0}")]
     InvalidFormat(String),
 
+    #[error("failed to parse ELF: {0}")]
+    ElfParse(String),
+
+    #[error("ELF segment LMA 0x{0:016X} exceeds u32 address space")]
+    ElfAddressOverflow(u64),
+
     #[error("address overlap at 0x{0:08X}")]
     AddressOverlap(u32),
 
